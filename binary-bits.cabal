@@ -1,0 +1,35 @@
+-- http://www.haskell.org/cabal/release/cabal-latest/doc/users-guide/authors.html#pkg-descr.
+name:                binary-bits
+version:             0.1
+synopsis:            Bit parsing on top of binary.
+description:         Bit parsing on top of binary. Provides functions to
+                     read parts of 8/16/32/64 words.
+license:             BSD3
+license-file:        LICENSE
+author:              Lennart Kolmodin <kolmodin@gentoo.org>
+maintainer:          Lennart Kolmodin <kolmodin@gentoo.org>
+-- copyright:
+category:            Data
+build-type:          Simple
+-- Extra files to be distributed with the package, such as examples or
+-- a README.
+-- extra-source-files:
+
+-- Constraint on the version of Cabal needed to build this package.
+cabal-version:       >=1.8
+
+
+library
+  exposed-modules:     Bits
+
+  build-depends: base==4.*, binary, bytestring
+  -- other-modules:
+  -- build-tools:
+
+test-suite qc
+  type: exitcode-stdio-1.0
+  main-is: BitsQC.hs
+
+  build-depends: binary-bits,
+                 base==4.*, binary, bytestring,
+                 QuickCheck>=2, random
