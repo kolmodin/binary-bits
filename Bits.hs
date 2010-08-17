@@ -37,8 +37,12 @@ data R a where
   RWord8 :: Int -> R Word8
   RWord16be :: Int -> R Word16
   RWord32be :: Int -> R Word32
+  RByteString :: Int -> R ByteString
+  RThis :: a -> R a
   RNextTo :: R a -> R b -> R (T a b)
-  RList :: R a -> Int -> R [a]
+  RMap :: R b -> (b -> R a) -> R a
+  RMapPure :: R a -> (a -> b) -> R b
+  RList :: Int -> R a -> R [a]
   RCheck :: R a -> (a -> Bool) -> String -> R a
 
 data T a b = !a :*: !b deriving (Show)
@@ -54,8 +58,11 @@ size_in_bits r = case r of
           RWord8 n -> min n 8
           RWord16be n -> min n 16
           RWord32be n -> min n 16
-          RList r n -> n * size_in_bits r
-          --RCase r cs -> size_in_bits r + maximum (map size_in_bits cs)
+          RByteString n -> 8 * n
+          RThis _ -> 0
+          RList n r -> n * size_in_bits r
+          RMap r _ -> size_in_bits r
+          RMapPure r _ -> size_in_bits r
           RCheck r _ _ -> size_in_bits r
           RNextTo a b -> size_in_bits a + size_in_bits b
 
@@ -65,7 +72,7 @@ data S = S !ByteString -- ^ Input
 
 size_in_bytes :: forall a. R a
               -> Int
-size_in_bytes r = (size_in_bits r + 7) `div` 8
+size_in_bytes r = byte_offset (size_in_bits r + 7)
 
 get :: R a -> Get a
 get r = do
@@ -73,17 +80,29 @@ get r = do
   a :*: s <- getS (S bs 0) r
   return a
 
-getS :: Monad m => S -> R a -> m (T a S)
+getS :: S -> R a -> Get (T a S)
 getS s0 r = do
   case r of
     RBool -> return (readBool s0)
     RWord8 n -> return (readWord8 s0 n)
     RWord16be n -> return (readWord16be s0 n)
+    RWord32be n -> return (readWord32be s0 n)
+    RByteString n -> return (readByteString s0 n)
+    RThis x -> return (x :*: s0)
     RNextTo a b -> do
       t :*: s <- getS s0 a
       u :*: s' <- getS s b
       return (t:*:u:*:s')
-    RList r n ->
+    RMap r p -> do
+      a :*: s@(S bs o) <- getS s0 r
+      let codepath = p a
+          required_bytes = byte_offset (size_in_bits r - o)
+      bs' <- getByteString required_bytes
+      getS (S (bs `append` bs') o) codepath
+    RMapPure r f -> do
+      a :*: s <- getS s0 r
+      return (f a :*: s)
+    RList n r ->
       let loop 0 s acc = return (List.reverse acc :*: s)
           loop m s acc = do
             a :*: s' <- getS s r
@@ -117,6 +136,12 @@ incS (S bs n) 1 =
 incS (S bs n) o =
   let (d,n') = divMod (n+o) 8
   in S (unsafeDrop d bs) n'
+
+
+readByteString :: S -> Int -> T ByteString S
+readByteString s@(S bs o) n
+  | o == 0 = unsafeTake n bs :*: (S (unsafeDrop n bs) 0)
+  | otherwise = unsafeTake n (unsafeTail bs) :*: (S (unsafeDrop (n+1) bs) 0)
 
 readWord8 :: S -> Int -> T Word8 S
 readWord8 s@(S bs o) n
@@ -166,24 +191,31 @@ readWord16be s@(S bs o) n
              in w :*: incS s n
 
   -- with offset, and n=9-16
-  | n <= 16 = let bits_in_msb = 8 - o
-                  (n',top) = (n - bits_in_msb
-                             , (fromIntegral (unsafeHead bs) .&. make_mask bits_in_msb) `shiftl_w16` (n - bits_in_msb))
-                    
-                  segs = byte_offset n
-
-                  bn 1 = fromIntegral (unsafeIndex bs 1)
-                  bn n = (bn (n-1) `shiftl_w16` 8) .|. fromIntegral (unsafeIndex bs n)
-
-                  mseg = bn segs
-
-                  last | bit_offset n' > 0 = (fromIntegral (unsafeIndex bs (segs + 1))) `shiftr_w16` (8 - (bit_offset n'))
-                       | otherwise = 0
-
-                  w = top .|. mseg .|. last
-              in w :*: incS s n
+  | n <= 16 = readWithOffset s shiftl_w16 shiftr_w16 n
 
   | otherwise = error "readWord16be: tried to read more than 16 bits"
+
+readWithoutOffset s@(S bs o) shifterL shifterR n
+  | o /= 0 = error "readWithoutOffset: there is an offset"
+
+  -- | n == 8 = readWord8 s n
+  -- | n == 16 = readWord16be s n
+  | n == 24 || n == 32 =
+              let segs = byte_offset n
+                  bn 0 = fromIntegral (unsafeHead bs)
+                  bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
+
+              in (bn (segs-1) :*: incS s n)
+
+  | n <= 64 = let segs = byte_offset n
+
+                  bn 0 = fromIntegral (unsafeHead bs)
+                  bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
+
+                  last = (fromIntegral (unsafeIndex bs (segs + 1))) `shifterR` (8 - (bit_offset n))
+
+                  w = bn segs .|. last
+              in w :*: incS s n
 
 readWithOffset s@(S bs o) shifterL shifterR n
   | n <= 64 = let bits_in_msb = 8 - o
@@ -214,8 +246,12 @@ readWord32be s@(S bs o) n
   | n <= 16 = let w :*: s' = readWord16be s n
               in fromIntegral w :*: s'
 
-  -- not implemented
-  | otherwise = error "readWord32be: Not fully implemented"
+  | o == 0 = readWithoutOffset s shiftl_w32 shiftr_w32 n
+            -- error "readWord32be: can't read without offset..."
+
+  | n <= 32 = readWithOffset s shiftl_w32 shiftr_w32 n
+
+  | otherwise = error "readWord32be: tried to read more than 32 bits"
 
 {-
 

@@ -4,6 +4,7 @@ import Data.Binary ( encode )
 import Data.Binary.Get
 import Data.Binary.Put
 
+import Data.Bits
 import Data.Word
 import System.Random
 
@@ -11,7 +12,24 @@ import Bits
 
 import Test.QuickCheck
 
-main = quickCheck prop_Word16be_with_offset
+main = do
+  quickCheck prop_Word16be_with_offset
+  quickCheck prop_Word16be_list
+  quickCheck prop_SimpleCase
+  quickCheck prop_Word32_from_2_Word16
+  quickCheck prop_Word32_from_Word8_and_Word16
+
+prop_SimpleCase :: Word16 -> Property
+prop_SimpleCase w = w < 0x8000 ==>
+  let p = RMap RBool $ \v -> case v of
+                                True -> RWord16be 15
+                                False -> RMapPure
+                                            (RWord8 7 `RNextTo` RWord8 8)
+                                            (\(msb:*:lsb)-> (fromIntegral msb `shiftL` 8) .|. fromIntegral lsb)
+      w' = runGet (get p) lbs
+  in w == w'
+  where
+  lbs = runPut (putWord16be w)
 
 prop_Word16be_with_offset :: Word16 -> Property
 prop_Word16be_with_offset w = w < 0x8000 ==>
@@ -19,6 +37,32 @@ prop_Word16be_with_offset w = w < 0x8000 ==>
   in w == w' && w == w''
   where
   lbs = runPut (putWord16be w >> putWord16be w)
+
+prop_Word16be_list :: Word8 -> [Word16] -> Property
+prop_Word16be_list w ws = property $
+  let p = RWord8 8 `RNextTo` RList (length ws) (RWord16be 16) :: R (T Word8 [Word16])
+      w' :*: ws' = runGet (get p) lbs :: T Word8 [Word16]
+  in ws == ws' && w == w'
+  where
+  lbs = runPut (putWord8 w >> mapM_ putWord16be ws)
+
+prop_Word32_from_Word8_and_Word16 :: Word8 -> Word16 -> Property
+prop_Word32_from_Word8_and_Word16 w8 w16 = property $
+  let p = RWord32be 24
+      w' = runGet (get p) lbs
+  in w0 == w'
+  where
+    lbs = runPut (putWord8 w8 >> putWord16be w16)
+    w0 = ((fromIntegral w8) `shiftL` 16) .|. fromIntegral w16
+
+prop_Word32_from_2_Word16 :: Word16 -> Word16 -> Property
+prop_Word32_from_2_Word16 w1 w2 = property $
+  let p = RWord32be 32
+      w' = runGet (get p) lbs
+  in w0 == w'
+  where
+    lbs = encode w0
+    w0 = ((fromIntegral w1) `shiftL` 16) .|. fromIntegral w2
 
 instance Arbitrary Word8 where
     arbitrary       = choose (minBound, maxBound)
