@@ -20,7 +20,7 @@ cabal-version:       >=1.8
 
 
 library
-  exposed-modules:     Bits
+  exposed-modules:     BitsGet
 
   build-depends: base==4.*, binary, bytestring
   -- other-modules:

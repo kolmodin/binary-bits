@@ -1,22 +1,25 @@
 {-# LANGUAGE GADTs, RankNTypes, MagicHash, CPP #-}
 
-module Bits ( R(..)
+module BitsGet
+            ( R(..)
             , T(..)
             , get
-            , getS
+            , getR
             , readBool
             , readWord8
             , readWord16be
-            {-
             , runBitGet
             , BitGet
-            -}
+            , getBool
+            , getWord8
+            , getWord16be
+            , getWord32be
 
             ) where
 
-import Data.Binary.Get
+import Data.Binary.Get ( runGet, Get, needMore, getByteString, getS, putS )
 
-import Data.ByteString
+import Data.ByteString as B
 import Data.ByteString.Internal
 import Data.ByteString.Unsafe
 
@@ -25,6 +28,8 @@ import qualified Data.ByteString.Lazy as L
 import Data.Bits
 import Data.Word
 import Data.List as List ( reverse )
+
+import Control.Applicative
 
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
 import GHC.Base hiding ( (:*:) )
@@ -47,10 +52,13 @@ data R a where
 
 data T a b = !a :*: !b deriving (Show)
 
+instance Functor R where
+  fmap f m = RMapPure m f
+
 instance Show (R a) where
   show r = case r of
             RBool -> "Bool"
-  
+
 size_in_bits :: forall a. R a -- ^ The record
      -> Int -- ^ Number of bits
 size_in_bits r = case r of
@@ -77,11 +85,11 @@ size_in_bytes r = byte_offset (size_in_bits r + 7)
 get :: R a -> Get a
 get r = do
   bs <- getByteString (size_in_bytes r)
-  a :*: s <- getS (S bs 0) r
+  a :*: s <- getR (S bs 0) r
   return a
 
-getS :: S -> R a -> Get (T a S)
-getS s0 r = do
+getR :: S -> R a -> Get (T a S)
+getR s0 r = do
   case r of
     RBool -> return (readBool s0)
     RWord8 n -> return (readWord8 s0 n)
@@ -90,26 +98,26 @@ getS s0 r = do
     RByteString n -> return (readByteString s0 n)
     RThis x -> return (x :*: s0)
     RNextTo a b -> do
-      t :*: s <- getS s0 a
-      u :*: s' <- getS s b
+      t :*: s <- getR s0 a
+      u :*: s' <- getR s b
       return (t:*:u:*:s')
     RMap r p -> do
-      a :*: s@(S bs o) <- getS s0 r
+      a :*: s@(S bs o) <- getR s0 r
       let codepath = p a
           required_bytes = byte_offset (size_in_bits r - o)
       bs' <- getByteString required_bytes
-      getS (S (bs `append` bs') o) codepath
+      getR (S (bs `append` bs') o) codepath
     RMapPure r f -> do
-      a :*: s <- getS s0 r
+      a :*: s <- getR s0 r
       return (f a :*: s)
     RList n r ->
       let loop 0 s acc = return (List.reverse acc :*: s)
           loop m s acc = do
-            a :*: s' <- getS s r
+            a :*: s' <- getR s r
             loop (m-1) s' (a:acc)
       in loop n s0 []
     RCheck r c m -> do
-      a :*: s <- getS s0 r
+      a :*: s <- getR s0 r
       if c a
         then return (a :*: s)
         else fail m
@@ -198,9 +206,7 @@ readWord16be s@(S bs o) n
 readWithoutOffset s@(S bs o) shifterL shifterR n
   | o /= 0 = error "readWithoutOffset: there is an offset"
 
-  -- | n == 8 = readWord8 s n
-  -- | n == 16 = readWord16be s n
-  | n == 24 || n == 32 =
+  | bit_offset n == 0 && byte_offset n <= 4 = 
               let segs = byte_offset n
                   bn 0 = fromIntegral (unsafeHead bs)
                   bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
@@ -247,13 +253,27 @@ readWord32be s@(S bs o) n
               in fromIntegral w :*: s'
 
   | o == 0 = readWithoutOffset s shiftl_w32 shiftr_w32 n
-            -- error "readWord32be: can't read without offset..."
 
   | n <= 32 = readWithOffset s shiftl_w32 shiftr_w32 n
 
   | otherwise = error "readWord32be: tried to read more than 32 bits"
 
-{-
+
+readWord64be :: S -> Int -> T Word32 S
+readWord64be s@(S bs o) n
+  -- 8 or fewer bits, use readWord8
+  | n <= 8 = let w :*: s' = readWord8 s n
+             in fromIntegral w :*: s'
+
+  -- 16 or fewer bits, use readWord16be
+  | n <= 16 = let w :*: s' = readWord16be s n
+              in fromIntegral w :*: s'
+
+  | o == 0 = readWithoutOffset s shiftl_w32 shiftr_w32 n
+
+  | n <= 64 = readWithOffset s shiftl_w32 shiftr_w32 n
+
+  | otherwise = error "readWord64be: tried to read more than 64 bits"
 
 ------------------------------------------------------------------------
 -- unrolled codensity/state monad
@@ -261,29 +281,57 @@ newtype BitGet a = C { runCont :: forall r.
                                   S -> 
                                   Failure   r ->
                                   Success a r ->
-                                  Either String r }
+                                  Get (Either String r) }
 
-type Failure   r = String -> Either String r
-type Success a r = S -> a -> Either String r
+type Failure   r = String -> Get (Either String r)
+type Success a r = S -> a -> Get (Either String r)
 
 instance Monad BitGet where
   return x = C $ \s kf ks -> ks s x
   fail str = C $ \s kf ks -> kf str
   (C c) >>= f = C $ \s kf ks -> c s kf (\s' a -> runCont (f a) s' kf ks)
 
-runBitGet :: BitGet a -> Int -> Get (Either String a)
-runBitGet bg size = do
-  bs <- getByteString size
-  return $ runCont bg (S bs 0) (\str -> Left str) (\s a -> Right a)
+instance Functor BitGet where
+  fmap f m = m >>= \a -> return (f a)
+
+instance Applicative BitGet where
+  pure x = return x
+  fm <*> m = fm >>= \f -> m >>= \v -> return (f v)
+
+runBitGet :: BitGet a -> Get (Either String a)
+runBitGet bg = do
+  bs <- getS -- get the current chunk
+  putS B.empty
+  v <- runCont bg (S bs 0) (\str -> return (Left str)) (\s a -> return (Right (s, a)))
+  case v of
+    Left err -> return (Left err)
+    Right ((S bs' n), x) -> do
+      let bs'' | n > 0 = B.tail bs'
+               | otherwise = bs'
+      putS bs''
+      return (Right x)
+
+ensure :: Int -> BitGet ()
+ensure n = C $ \s kf ks ->
+  let loop (S bs o) | n <= (B.length bs * 8 - o) = ks (S bs o) ()
+                    | otherwise = do
+                        needMore
+                        bs' <- getS
+                        putS B.empty
+                        loop (S (bs`append`bs') o)
+  in loop s
+
+getBool :: BitGet Bool
+getBool = ensure 1 >> modifyState readBool
 
 getWord8 :: Int -> BitGet Word8
-getWord8 = modifyState . flip readWord8
+getWord8 n = ensure n >> modifyState (flip readWord8 n)
   
 getWord16be :: Int -> BitGet Word16
-getWord16be = modifyState . flip readWord16be
+getWord16be n = ensure n >> modifyState (flip readWord16be n)
 
 getWord32be :: Int -> BitGet Word32
-getWord32be = modifyState . flip readWord32be
+getWord32be n = ensure n >> modifyState (flip readWord32be n)
  
 getState :: BitGet S
 getState = C $ \s kf ks -> ks s s
@@ -294,7 +342,6 @@ putState s = C $ \_ kf ks -> ks s ()
 modifyState :: (S -> (T a S)) -> BitGet a
 modifyState f = C $ \s kf ks -> case f s of
                                   w :*: s' -> ks s' w
--}
 
 ------------------------------------------------------------------------
 -- Unchecked shifts, from the package binary
