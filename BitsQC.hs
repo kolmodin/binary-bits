@@ -37,7 +37,7 @@ prop_SimpleCase w = w < 0x8000 ==>
 prop_Word8_putget :: [Word8] -> Property
 prop_Word8_putget ws = length ws <= fromIntegral (maxBound :: Word8) ==>
   -- write all word8s with as many bits as it's required
-  let p = mapM_ (\v -> BP.putWord8be (bitreq v) v) ws
+  let p = mapM_ (\v -> BP.putWord8 (bitreq v) v) ws
       g = mapM BG.getWord8 bitlist
       lbs = runPut (BP.runBitPut p)
       Right ws' = runGet (runBitGet g) lbs
