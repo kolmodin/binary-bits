@@ -8,7 +8,7 @@ module BitsPut
 import qualified Data.Binary.Builder as B
 import Data.Binary.Builder ( Builder )
 import qualified Data.Binary.Put as Put
-import Data.ByteString 
+import Data.ByteString
 
 import Data.Bits
 import Data.Monoid
@@ -63,4 +63,4 @@ instance Monad BitPut where
     let PairS a s'  = run m s
         PairS b s'' = run (k a) s'
     in PairS b s''
-  return x = BitPut $ \s -> PairS x s 
+  return x = BitPut $ \s -> PairS x s

@@ -1,10 +1,10 @@
 {-# LANGUAGE GADTs, RankNTypes, MagicHash, CPP #-}
 
 module BitsGet
-            ( R(..)
-            , T(..)
-            , get
-            , getR
+            ( -- R(..),
+            T(..)
+            -- , get
+            -- , getR
             , readBool
             , readWord8
             , readWord16be
@@ -37,90 +37,11 @@ import GHC.Word
 import GHC.Int
 #endif
 
-data R a where
-  RBool :: R Bool
-  RWord8 :: Int -> R Word8
-  RWord16be :: Int -> R Word16
-  RWord32be :: Int -> R Word32
-  RByteString :: Int -> R ByteString
-  RThis :: a -> R a
-  RNextTo :: R a -> R b -> R (T a b)
-  RMap :: R b -> (b -> R a) -> R a
-  RMapPure :: R a -> (a -> b) -> R b
-  RList :: Int -> R a -> R [a]
-  RCheck :: R a -> (a -> Bool) -> String -> R a
-
 data T a b = !a :*: !b deriving (Show)
-
-instance Functor R where
-  fmap f m = RMapPure m f
-
-instance Show (R a) where
-  show r = case r of
-            RBool -> "Bool"
-
-size_in_bits :: forall a. R a -- ^ The record
-     -> Int -- ^ Number of bits
-size_in_bits r = case r of
-          RBool -> 1
-          RWord8 n -> min n 8
-          RWord16be n -> min n 16
-          RWord32be n -> min n 16
-          RByteString n -> 8 * n
-          RThis _ -> 0
-          RList n r -> n * size_in_bits r
-          RMap r _ -> size_in_bits r
-          RMapPure r _ -> size_in_bits r
-          RCheck r _ _ -> size_in_bits r
-          RNextTo a b -> size_in_bits a + size_in_bits b
 
 data S = S !ByteString -- ^ Input
            !Int -- ^ Bit offset (0-7)
           deriving (Show)
-
-size_in_bytes :: forall a. R a
-              -> Int
-size_in_bytes r = byte_offset (size_in_bits r + 7)
-
-get :: R a -> Get a
-get r = do
-  bs <- getByteString (size_in_bytes r)
-  a :*: s <- getR (S bs 0) r
-  return a
-
-getR :: S -> R a -> Get (T a S)
-getR s0 r = do
-  case r of
-    RBool -> return (readBool s0)
-    RWord8 n -> return (readWord8 s0 n)
-    RWord16be n -> return (readWord16be s0 n)
-    RWord32be n -> return (readWord32be s0 n)
-    RByteString n -> return (readByteString s0 n)
-    RThis x -> return (x :*: s0)
-    RNextTo a b -> do
-      t :*: s <- getR s0 a
-      u :*: s' <- getR s b
-      return (t:*:u:*:s')
-    RMap r p -> do
-      a :*: s@(S bs o) <- getR s0 r
-      let codepath = p a
-          required_bytes = byte_offset (size_in_bits r - o)
-      bs' <- getByteString required_bytes
-      getR (S (bs `append` bs') o) codepath
-    RMapPure r f -> do
-      a :*: s <- getR s0 r
-      return (f a :*: s)
-    RList n r ->
-      let loop 0 s acc = return (List.reverse acc :*: s)
-          loop m s acc = do
-            a :*: s' <- getR s r
-            loop (m-1) s' (a:acc)
-      in loop n s0 []
-    RCheck r c m -> do
-      a :*: s <- getR s0 r
-      if c a
-        then return (a :*: s)
-        else fail m
 
 -- make_mask 3 = 00000111
 make_mask :: Bits a => Int -> a
@@ -388,3 +309,86 @@ shiftr_w16 = shiftR
 shiftr_w32 = shiftR
 shiftr_w64 = shiftR
 #endif
+
+{-
+data R a where
+  RBool :: R Bool
+  RWord8 :: Int -> R Word8
+  RWord16be :: Int -> R Word16
+  RWord32be :: Int -> R Word32
+  RByteString :: Int -> R ByteString
+  RThis :: a -> R a
+  RNextTo :: R a -> R b -> R (T a b)
+  RMap :: R b -> (b -> R a) -> R a
+  RMapPure :: R a -> (a -> b) -> R b
+  RList :: Int -> R a -> R [a]
+  RCheck :: R a -> (a -> Bool) -> String -> R a
+
+instance Functor R where
+  fmap f m = RMapPure m f
+
+instance Show (R a) where
+  show r = case r of
+            RBool -> "Bool"
+
+size_in_bits :: forall a. R a -- ^ The record
+     -> Int -- ^ Number of bits
+size_in_bits r = case r of
+          RBool -> 1
+          RWord8 n -> min n 8
+          RWord16be n -> min n 16
+          RWord32be n -> min n 16
+          RByteString n -> 8 * n
+          RThis _ -> 0
+          RList n r -> n * size_in_bits r
+          RMap r _ -> size_in_bits r
+          RMapPure r _ -> size_in_bits r
+          RCheck r _ _ -> size_in_bits r
+          RNextTo a b -> size_in_bits a + size_in_bits b
+
+size_in_bytes :: forall a. R a
+              -> Int
+size_in_bytes r = byte_offset (size_in_bits r + 7)
+
+get :: R a -> Get a
+get r = do
+  bs <- getByteString (size_in_bytes r)
+  a :*: s <- getR (S bs 0) r
+  return a
+
+getR :: S -> R a -> Get (T a S)
+getR s0 r = do
+  case r of
+    RBool -> return (readBool s0)
+    RWord8 n -> return (readWord8 s0 n)
+    RWord16be n -> return (readWord16be s0 n)
+    RWord32be n -> return (readWord32be s0 n)
+    RByteString n -> return (readByteString s0 n)
+    RThis x -> return (x :*: s0)
+    RNextTo a b -> do
+      t :*: s <- getR s0 a
+      u :*: s' <- getR s b
+      return (t:*:u:*:s')
+    RMap r p -> do
+      a :*: s@(S bs o) <- getR s0 r
+      let codepath = p a
+          required_bytes = byte_offset (size_in_bits r - o)
+      bs' <- getByteString required_bytes
+      getR (S (bs `append` bs') o) codepath
+    RMapPure r f -> do
+      a :*: s <- getR s0 r
+      return (f a :*: s)
+    RList n r ->
+      let loop 0 s acc = return (List.reverse acc :*: s)
+          loop m s acc = do
+            a :*: s' <- getR s r
+            loop (m-1) s' (a:acc)
+      in loop n s0 []
+    RCheck r c m -> do
+      a :*: s <- getR s0 r
+      if c a
+        then return (a :*: s)
+        else fail m
+-}
+
+

@@ -14,26 +14,17 @@ import qualified BitsPut as BP
 import Test.QuickCheck
 
 main = do
-  quickCheck prop_Word16be_with_offset
-  quickCheck prop_Word16be_list
-  quickCheck prop_SimpleCase
-  quickCheck prop_Word32_from_2_Word16
-  quickCheck prop_Word32_from_Word8_and_Word16
   quickCheck prop_Bools
   quickCheck prop_Word8_putget 
 
-prop_SimpleCase :: Word16 -> Property
-prop_SimpleCase w = w < 0x8000 ==>
-  let p = RMap RBool $ \v -> case v of
-                                True -> RWord16be 15
-                                False -> RMapPure
-                                            (RWord8 7 `RNextTo` RWord8 8)
-                                            (\(msb:*:lsb)-> (fromIntegral msb `shiftL` 8) .|. fromIntegral lsb)
-      w' = runGet (get p) lbs
-  in w == w'
-  where
-  lbs = runPut (putWord16be w)
-
+  -- these tests use the R structure
+  --
+  -- quickCheck prop_Word16be_with_offset
+  -- quickCheck prop_Word16be_list
+  -- quickCheck prop_SimpleCase
+  -- quickCheck prop_Word32_from_2_Word16
+  -- quickCheck prop_Word32_from_Word8_and_Word16
+ 
 prop_Word8_putget :: [Word8] -> Property
 prop_Word8_putget ws = length ws <= fromIntegral (maxBound :: Word8) ==>
   -- write all word8s with as many bits as it's required
@@ -55,6 +46,20 @@ prop_Bools bs = property $
       Right bs' = runGet (BG.runBitGet p) lbs
   in bs == bs'
   where lbs = runPut $ BP.runBitPut (mapM_ BP.putBool bs)
+
+
+{-
+prop_SimpleCase :: Word16 -> Property
+prop_SimpleCase w = w < 0x8000 ==>
+  let p = RMap RBool $ \v -> case v of
+                                True -> RWord16be 15
+                                False -> RMapPure
+                                            (RWord8 7 `RNextTo` RWord8 8)
+                                            (\(msb:*:lsb)-> (fromIntegral msb `shiftL` 8) .|. fromIntegral lsb)
+      w' = runGet (get p) lbs
+  in w == w'
+  where
+  lbs = runPut (putWord16be w)
 
 prop_Word16be_with_offset :: Word16 -> Property
 prop_Word16be_with_offset w = w < 0x8000 ==>
@@ -88,6 +93,7 @@ prop_Word32_from_2_Word16 w1 w2 = property $
   where
     lbs = encode w0
     w0 = ((fromIntegral w1) `shiftL` 16) .|. fromIntegral w2
+-}
 
 instance Arbitrary Word8 where
     arbitrary       = choose (minBound, maxBound)
