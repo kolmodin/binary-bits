@@ -148,16 +148,19 @@ readWithoutOffset s@(S bs o) shifterL shifterR n
 readWithOffset s@(S bs o) shifterL shifterR n
   | n <= 64 = let bits_in_msb = 8 - o
                   (n',top) = (n - bits_in_msb
-                             , (fromIntegral (unsafeHead bs) .&. make_mask bits_in_msb) `shifterL` (n - bits_in_msb))
+                             , (fromIntegral (unsafeHead bs) .&. make_mask bits_in_msb) `shifterL` n')
                     
-                  segs = byte_offset n
+                  segs = byte_offset n'
 
+                  bn 0 = 0
                   bn 1 = fromIntegral (unsafeIndex bs 1)
                   bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
 
-                  mseg = bn segs
+                  o' = bit_offset n'
 
-                  last | bit_offset n' > 0 = (fromIntegral (unsafeIndex bs (segs + 1))) `shifterR` (8 - (bit_offset n'))
+                  mseg = bn segs `shifterL` o'
+
+                  last | o' > 0 = (fromIntegral (unsafeIndex bs (segs + 1))) `shifterR` (8 - o')
                        | otherwise = 0
 
                   w = top .|. mseg .|. last
