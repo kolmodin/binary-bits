@@ -111,22 +111,33 @@ prop_Word32_from_2_Word16 w1 w2 = property $
     w0 = ((fromIntegral w1) `shiftL` 16) .|. fromIntegral w2
 -}
 
+
+shrinker :: (Num a, Ord a, Bits a) => a -> [a]
+shrinker 0 = []
+shrinker w = [ w `shiftR` 1 -- try to make everything roughly half size
+             ] ++ [ w' -- flip bits to zero, left->right
+                  | m <- [n, n-1..1]
+                  , let w' = w `clearBit` m
+                  , w /= w'
+                  ] ++ [w-1] -- just make it a little smaller
+  where
+    n = bitreq w
+
 instance Arbitrary Word8 where
     arbitrary       = choose (minBound, maxBound)
-    shrink 0        = []
-    shrink n        = [ n - 1 ]
+    shrink          = shrinker
 
 instance Arbitrary Word16 where
     arbitrary       = choose (minBound, maxBound)
-    shrink 0        = []
-    shrink n        = [ n - 10000, n - 1000, n - 100, n - 1 ]
+    shrink          = shrinker
 
 instance Arbitrary Word32 where
     arbitrary       = choose (minBound, maxBound)
+    shrink          = shrinker
 
 instance Arbitrary Word64 where
     arbitrary       = choose (minBound, maxBound)
-
+    shrink          = shrinker
 
 integralRandomR :: (Integral a, RandomGen g) => (a,a) -> g -> (a,g)
 integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
