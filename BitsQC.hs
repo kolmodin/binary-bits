@@ -24,14 +24,12 @@ main = do
 
   -- these tests use the R structure
   --
-  -- quickCheck prop_Word16be_with_offset
-  -- quickCheck prop_Word16be_list
   -- quickCheck prop_Word32_from_2_Word16
   -- quickCheck prop_Word32_from_Word8_and_Word16
  
 prop_Word8_putget :: Word8 -> Property
 prop_Word8_putget w = property $
-  -- write all word8s with as many bits as it's required
+  -- write all words with as many bits as it's required
   let p = putWord8 (bitreq w) w
       g = getWord8 (bitreq w)
       lbs = runPut (runBitPut p)
@@ -40,7 +38,7 @@ prop_Word8_putget w = property $
 
 prop_Word16be_putget :: Word16 -> Property
 prop_Word16be_putget w = property $
-  -- write all word8s with as many bits as it's required
+  -- write all words with as many bits as it's required
   let p = putWord16be (bitreq w) w
       g = getWord16be (bitreq w)
       lbs = runPut (runBitPut p)
@@ -60,7 +58,6 @@ prop_Word8_putget_list ws = property $
 
 prop_Word16be_putget_list_simple :: [Word16] -> Property
 prop_Word16be_putget_list_simple ws = property $
-  -- write all word8s with as many bits as it's required
   let p = mapM_ (\v -> putWord16be 16 v) ws
       g = mapM (const (getWord16be 16)) ws
       lbs = runPut (runBitPut p)
@@ -71,7 +68,7 @@ prop_Word16be_putget_list_simple ws = property $
 
 prop_Word16be_putget_list :: [Word16] -> Property
 prop_Word16be_putget_list ws = property $
-  -- write all word8s with as many bits as it's required
+  -- write all words with as many bits as it's required
   let p = mapM_ (\v -> putWord16be (bitreq v) v) ws
       g = mapM getWord16be bitlist
       lbs = runPut (runBitPut p)
@@ -85,7 +82,7 @@ bitreq :: (Num b, Bits a, Ord a) => a -> b
 bitreq v = fromIntegral . head $ [ req | (req, top) <- bittable, v <= top ]
 
 bittable :: Bits a => [(Integer, a)]
-bittable = [ (fromIntegral x, (1 `shiftL` x) - 1) | x <- [1..16] ]
+bittable = [ (fromIntegral x, (1 `shiftL` x) - 1) | x <- [1..64] ]
 
 prop_Bools :: [Bool] -> Property
 prop_Bools bs = property $
@@ -112,33 +109,6 @@ prop_SimpleCase b w = w < 0x8000 ==>
 
 
 {-
-prop_SimpleCase :: Word16 -> Property
-prop_SimpleCase w = w < 0x8000 ==>
-  let p = RMap RBool $ \v -> case v of
-                                True -> RWord16be 15
-                                False -> RMapPure
-                                            (RWord8 7 `RNextTo` RWord8 8)
-                                            (\(msb:*:lsb)-> (fromIntegral msb `shiftL` 8) .|. fromIntegral lsb)
-      w' = runGet (get p) lbs
-  in w == w'
-  where
-  lbs = runPut (putWord16be w)
-
-prop_Word16be_with_offset :: Word16 -> Property
-prop_Word16be_with_offset w = w < 0x8000 ==>
-  let b :*: w' :*: w'' = runGet (get (RCheck RBool not "fail" `RNextTo` RWord16be 15 `RNextTo` RWord16be 16)) lbs
-  in w == w' && w == w''
-  where
-  lbs = runPut (putWord16be w >> putWord16be w)
-
-prop_Word16be_list :: Word8 -> [Word16] -> Property
-prop_Word16be_list w ws = property $
-  let p = RWord8 8 `RNextTo` RList (length ws) (RWord16be 16) :: R (T Word8 [Word16])
-      w' :*: ws' = runGet (get p) lbs :: T Word8 [Word16]
-  in ws == ws' && w == w'
-  where
-  lbs = runPut (putWord8 w >> mapM_ putWord16be ws)
-
 prop_Word32_from_Word8_and_Word16 :: Word8 -> Word16 -> Property
 prop_Word32_from_Word8_and_Word16 w8 w16 = property $
   let p = RWord32be 24
