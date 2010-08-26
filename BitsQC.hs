@@ -17,8 +17,8 @@ import BitsPut
 import Test.QuickCheck
 
 main = do
-  quickCheck prop_Bools
-  quickCheck prop_SimpleCase
+  quickCheck prop_bitreq
+  quickCheck prop_composite_case
 
   quickCheck (prop_putget_with_bitreq :: Word8  -> Property)
   quickCheck (prop_putget_with_bitreq :: Word16 -> Property)
@@ -71,15 +71,13 @@ bitreq v = fromIntegral . head $ [ req | (req, top) <- bittable, v <= top ]
 bittable :: Bits a => [(Integer, a)]
 bittable = [ (fromIntegral x, (1 `shiftL` x) - 1) | x <- [1..64] ]
 
-prop_Bools :: [Bool] -> Property
-prop_Bools bs = property $
-  let p = sequence . replicate (length bs) $ getBool
-      Right bs' = runGet (runBitGet p) lbs
-  in bs == bs'
-  where lbs = runPut $ runBitPut (mapM_ putBool bs)
+prop_bitreq :: Word64 -> Property
+prop_bitreq w = property $
+  ( w == 0 && bitreq w == 1 )
+    || bitreq w == (bitreq (w `shiftR` 1)) + 1
 
-prop_SimpleCase :: Bool -> Word16 -> Property
-prop_SimpleCase b w = w < 0x8000 ==>
+prop_composite_case :: Bool -> Word16 -> Property
+prop_composite_case b w = w < 0x8000 ==>
   let p = do putBool b
              putWord16be 15 w
       g = do v <- getBool
@@ -92,8 +90,6 @@ prop_SimpleCase b w = w < 0x8000 ==>
       lbs = runPut (runBitPut p)
       w' = runGet (runBitGetSimple g) lbs
   in w == w'
-  where
-
 
 {-
 prop_Word32_from_Word8_and_Word16 :: Word8 -> Word16 -> Property
