@@ -1,6 +1,7 @@
 module BitsPut
           ( putBool
           , putWord8
+          , putWord16be
           , runBitPut
           )
           where
@@ -43,7 +44,21 @@ putWord16be n w
   | otherwise =
       BitPut $ \s -> PairS () $
         case s of
-          (S b t o) | otherwise -> undefined
+          -- as n>=9, it's too big to fit into one single byte
+          -- it'll either use 2 or 3 bytes
+                                     -- it'll fit in 2 bytes
+          (S b t o) | o + n <= 16 -> flush $
+                        let o' = o + n - 8
+                            w' = t .|. fromIntegral (w `shiftR` o')
+                            t' = fromIntegral (w `shiftL` (8-o'))
+                        in (S (b `mappend` B.singleton w') t' o')
+                                   -- 3 bytes required
+                    | otherwise -> flush $
+                        let o'  = o + n - 16
+                            w'  = t .|. fromIntegral (w `shiftR` (o' + 8))
+                            w'' = fromIntegral ((w `shiftR` o') .&. 0xff)
+                            t'  = fromIntegral (w `shiftL` (8-o'))
+                        in (S (b `mappend` B.singleton w' `mappend` B.singleton w'') t' o')
 
 flush :: S -> S
 flush s@(S b w o)
