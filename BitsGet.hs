@@ -9,6 +9,7 @@ module BitsGet
             , readWord8
             , readWord16be
             , runBitGet
+            , runBitGetSimple
             , BitGet
             , getBool
             , getWord8
@@ -218,6 +219,13 @@ instance Functor BitGet where
 instance Applicative BitGet where
   pure x = return x
   fm <*> m = fm >>= \f -> m >>= \v -> return (f v)
+
+runBitGetSimple :: BitGet a -> Get a
+runBitGetSimple bg = do
+  v <- runBitGet bg
+  case v of
+    Left err -> fail err
+    Right v -> return v
 
 runBitGet :: BitGet a -> Get (Either String a)
 runBitGet bg = do
