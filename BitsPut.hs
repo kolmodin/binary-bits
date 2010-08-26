@@ -1,8 +1,10 @@
 module BitsPut
-          ( putBool
+          ( BitPut
+          , runBitPut
+
+          , putBool
           , putWord8
           , putWord16be
-          , runBitPut
           )
           where
 

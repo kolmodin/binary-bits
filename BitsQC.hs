@@ -4,8 +4,11 @@ import Data.Binary ( encode )
 import Data.Binary.Get ( runGet )
 import Data.Binary.Put ( runPut )
 
+import Bits
+
 import Data.Bits
 import Data.Word
+import Foreign.Storable
 import System.Random
 
 import BitsGet
@@ -16,61 +19,45 @@ import Test.QuickCheck
 main = do
   quickCheck prop_Bools
   quickCheck prop_SimpleCase
-  quickCheck prop_Word8_putget
-  quickCheck prop_Word8_putget_list
-  quickCheck prop_Word16be_putget 
-  quickCheck prop_Word16be_putget_list_simple
-  quickCheck prop_Word16be_putget_list
+
+  quickCheck (prop_putget_with_bitreq :: Word8  -> Property)
+  quickCheck (prop_putget_with_bitreq :: Word16 -> Property)
+
+  quickCheck (prop_putget_list_simple :: [Bool]   -> Property)
+  quickCheck (prop_putget_list_simple :: [Word8]  -> Property)
+  quickCheck (prop_putget_list_simple :: [Word16] -> Property)
+
+  quickCheck (prop_putget_list_with_bitreq :: [Word8]  -> Property)
+  quickCheck (prop_putget_list_with_bitreq :: [Word16] -> Property)
 
   -- these tests use the R structure
   --
   -- quickCheck prop_Word32_from_2_Word16
   -- quickCheck prop_Word32_from_Word8_and_Word16
  
-prop_Word8_putget :: Word8 -> Property
-prop_Word8_putget w = property $
+prop_putget_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => a -> Property
+prop_putget_with_bitreq w = property $
   -- write all words with as many bits as it's required
-  let p = putWord8 (bitreq w) w
-      g = getWord8 (bitreq w)
+  let p = putBits (bitreq w) w
+      g = getBits (bitreq w)
       lbs = runPut (runBitPut p)
       w' = runGet (runBitGetSimple g) lbs
   in w == w'
 
-prop_Word16be_putget :: Word16 -> Property
-prop_Word16be_putget w = property $
-  -- write all words with as many bits as it's required
-  let p = putWord16be (bitreq w) w
-      g = getWord16be (bitreq w)
-      lbs = runPut (runBitPut p)
-      w' = runGet (runBitGetSimple g) lbs
-  in w == w'
-
-prop_Word8_putget_list :: [Word8] -> Property
-prop_Word8_putget_list ws = property $
-  -- write all word8s with as many bits as it's required
-  let p = mapM_ (\v -> putWord8 (bitreq v) v) ws
-      g = mapM getWord8 bitlist
-      lbs = runPut (runBitPut p)
-      Right ws' = runGet (runBitGet g) lbs
-  in ws == ws'
-  where
-    bitlist = map bitreq ws
-
-prop_Word16be_putget_list_simple :: [Word16] -> Property
-prop_Word16be_putget_list_simple ws = property $
-  let p = mapM_ (\v -> putWord16be 16 v) ws
-      g = mapM (const (getWord16be 16)) ws
+prop_putget_list_simple :: (BinaryBit a, Eq a, Storable a) => [a] -> Property
+prop_putget_list_simple ws = property $
+  let s = sizeOf (head ws) * 8
+      p = mapM_ (\v -> putBits s v) ws
+      g = mapM  (const (getBits s)) ws
       lbs = runPut (runBitPut p)
       ws' = runGet (runBitGetSimple g) lbs
   in ws == ws'
-  where
-    bitlist = map bitreq ws
 
-prop_Word16be_putget_list :: [Word16] -> Property
-prop_Word16be_putget_list ws = property $
+prop_putget_list_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => [a] -> Property
+prop_putget_list_with_bitreq ws = property $
   -- write all words with as many bits as it's required
-  let p = mapM_ (\v -> putWord16be (bitreq v) v) ws
-      g = mapM getWord16be bitlist
+  let p = mapM_ (\v -> putBits (bitreq v) v) ws
+      g = mapM getBits bitlist
       lbs = runPut (runBitPut p)
       ws' = runGet (runBitGetSimple g) lbs
   in ws == ws'
