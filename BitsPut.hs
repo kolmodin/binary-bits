@@ -5,6 +5,7 @@ module BitsPut
           , putBool
           , putWord8
           , putWord16be
+          , putWord32be
           )
           where
 
@@ -61,6 +62,17 @@ putWord16be n w
                             w'' = fromIntegral ((w `shiftR` o') .&. 0xff)
                             t'  = fromIntegral (w `shiftL` (8-o'))
                         in (S (b `mappend` B.singleton w' `mappend` B.singleton w'') t' o')
+
+putWord32be :: Int -> Word32 -> BitPut ()
+putWord32be n w
+  | n <= 16 = putWord16be n (fromIntegral w)
+  | otherwise = do
+      putWord32be (n-16) (w`shiftR`16)
+      putWord32be    16  (w .&. 0x0000ffff)
+
+putWord64be :: Int -> Word64 -> BitPut ()
+putWord64be n w
+  | n <= 16 = putWord16be n (fromIntegral w)
 
 flush :: S -> S
 flush s@(S b w o)

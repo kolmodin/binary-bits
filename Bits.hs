@@ -20,3 +20,13 @@ instance BinaryBit Word8 where
 instance BinaryBit Word16 where
   putBits = putWord16be
   getBits = getWord16be
+
+instance BinaryBit Word32 where
+  putBits = putWord32be
+  getBits = getWord32be
+
+{-
+instance BinaryBit Word64 where
+  putBits = putWord64be
+  getBits = getWord64be
+-}
