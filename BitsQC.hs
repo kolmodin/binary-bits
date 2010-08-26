@@ -7,33 +7,72 @@ import Data.Binary.Put ( runPut )
 import Bits
 
 import Data.Bits
+import Data.Monoid
 import Data.Word
 import Foreign.Storable
 import System.Random
+import System
 
 import BitsGet
 import BitsPut
 
+import Test.Framework.Options ( TestOptions'(..) )
+import Test.Framework.Providers.QuickCheck2 ( testProperty )
+import Test.Framework.Runners.Console ( defaultMainWithOpts )
+import Test.Framework.Runners.Options ( RunnerOptions'(..) )
+import Test.Framework ( Test, testGroup )
 import Test.QuickCheck
 
 main = do
-  quickCheck prop_bitreq
-  quickCheck prop_composite_case
+  args <- getArgs
+  defaultMainWithOpts tests (setMaxTestCases (if null args then 1024 else read (head args)))
+  where
+  -- increase the number of test cases
+  setMaxTestCases n =
+    mempty
+      { ropt_test_options = Just $
+          mempty
+            { topt_maximum_generated_tests = Just n
+            }
+      }
 
-  quickCheck (prop_putget_with_bitreq :: Word8  -> Property)
-  quickCheck (prop_putget_with_bitreq :: Word16 -> Property)
+tests :: [Test]
+tests =
+  [ testGroup "Internal test functions"
+      [ testProperty "prop_bitreq" prop_bitreq ]
 
-  quickCheck (prop_putget_list_simple :: [Bool]   -> Property)
-  quickCheck (prop_putget_list_simple :: [Word8]  -> Property)
-  quickCheck (prop_putget_list_simple :: [Word16] -> Property)
+  , testGroup "Custom test cases"
+      [ testProperty "prop_composite_case" prop_composite_case ]
 
-  quickCheck (prop_putget_list_with_bitreq :: [Word8]  -> Property)
-  quickCheck (prop_putget_list_with_bitreq :: [Word16] -> Property)
+  , testGroup "prop_put_with_bitreq"
+      [ testProperty "Word8"  (prop_putget_with_bitreq :: Word8  -> Property)
+      , testProperty "Word16" (prop_putget_with_bitreq :: Word16 -> Property)
+      , testProperty "Word32" (prop_putget_with_bitreq :: Word32 -> Property)
+      -- , testProperty "Word64" (prop_putget_with_bitreq :: Word64 -> Property)
+      ]
 
+  , testGroup "prop_putget_list_simple"
+      [ testProperty "Bool"  (prop_putget_list_simple :: [Bool]   -> Property)
+      , testProperty "Word8" (prop_putget_list_simple :: [Word8]  -> Property)
+      , testProperty "Word16" (prop_putget_list_simple :: [Word16] -> Property)
+      , testProperty "Word32" (prop_putget_list_simple :: [Word32] -> Property)
+      -- , testProperty "Word64" (prop_putget_list_simple :: [Word64] -> Property)
+      ]
+
+  , testGroup "prop_putget_list_with_bitreq"
+      [ testProperty "Word8"  (prop_putget_list_with_bitreq :: [Word8]  -> Property)
+      , testProperty "Word16" (prop_putget_list_with_bitreq :: [Word16] -> Property)
+      , testProperty "Word32" (prop_putget_list_with_bitreq :: [Word32] -> Property)
+      -- , testProperty "Word64"  (prop_putget_list_with_bitreq :: [Word64] -> Property)
+      ]
+  ]
+
+{-
   -- these tests use the R structure
   --
   -- quickCheck prop_Word32_from_2_Word16
   -- quickCheck prop_Word32_from_Word8_and_Word16
+-}
  
 prop_putget_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => a -> Property
 prop_putget_with_bitreq w = property $

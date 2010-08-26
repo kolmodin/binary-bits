@@ -30,6 +30,8 @@ test-suite qc
   type: exitcode-stdio-1.0
   main-is: BitsQC.hs
 
-  build-depends: binary-bits,
-                 base==4.*, binary, bytestring,
-                 QuickCheck>=2, random
+  build-depends: binary-bits, binary,
+                 base==4.*, haskell98, bytestring,
+                 QuickCheck>=2, random,
+                 test-framework,
+                 test-framework-quickcheck2
