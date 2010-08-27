@@ -7,6 +7,7 @@ module BitsPut
           , putWord8
           , putWord16be
           , putWord32be
+          , putWord64be
           )
           where
 
@@ -75,7 +76,10 @@ putWord32be n w
 
 putWord64be :: Int -> Word64 -> BitPut ()
 putWord64be n w
-  | n <= 16 = putWord16be n (fromIntegral w)
+  | n <= 32 = putWord32be n (fromIntegral w)
+  | otherwise = do
+      putWord64be (n-32) (w`shiftR`32)
+      putWord64be    32  (w .&. 0xffffffff)
 
 joinPut :: Put -> BitPut ()
 joinPut m = BitPut $ \s0 -> PairS () $
