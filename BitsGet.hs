@@ -154,9 +154,9 @@ readWithoutOffset s@(S bs o) shifterL shifterR n
                   bn 0 = fromIntegral (unsafeHead bs)
                   bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
 
-                  msegs = bn segs `shifterL` o'
+                  msegs = bn (segs-1) `shifterL` o'
 
-                  last = (fromIntegral (unsafeIndex bs (segs + 1))) `shifterR` (8 - (bit_offset n))
+                  last = (fromIntegral (unsafeIndex bs segs)) `shifterR` (8 - o')
 
                   w = msegs .|. last
               in w :*: incS s n
