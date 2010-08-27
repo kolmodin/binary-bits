@@ -1,8 +1,11 @@
 module Main where
 
-import Data.Binary ( encode )
+import Data.Binary ( encode, Binary(..) )
 import Data.Binary.Get ( runGet )
 import Data.Binary.Put ( runPut )
+
+import qualified Data.Binary.Get as BG ( getWord8, getWord16be, getWord32be, getWord64be )
+import qualified Data.Binary.Put as BP ( putWord8, putWord16be, putWord32be, putWord64be )
 
 import Bits
 
@@ -44,6 +47,34 @@ tests =
   , testGroup "Custom test cases"
       [ testProperty "prop_composite_case" prop_composite_case ]
 
+  , testGroup "prop_bitput_with_get_from_binary"
+      [ testProperty "Word8"  (prop_bitput_with_get_from_binary :: [Word8]  -> Property)
+      , testProperty "Word16" (prop_bitput_with_get_from_binary :: [Word16] -> Property)
+      , testProperty "Word32" (prop_bitput_with_get_from_binary :: [Word32] -> Property)
+      -- , testProperty "Word64" (prop_bitput_with_get_from_binary :: [Word64] -> Property)
+      ]
+
+  , testGroup "prop_bitget_with_put_from_binary"
+      [ testProperty "Word8"  (prop_bitget_with_put_from_binary :: [Word8]  -> Property)
+      , testProperty "Word16" (prop_bitget_with_put_from_binary :: [Word16] -> Property)
+      , testProperty "Word32" (prop_bitget_with_put_from_binary :: [Word32] -> Property)
+      -- , testProperty "Word64" (prop_bitget_with_put_from_binary :: [Word64] -> Property)
+      ]
+
+  , testGroup "prop_compare_put_with_naive"
+      [ testProperty "Word8"  (prop_compare_put_with_naive :: [Word8]  -> Property)
+      , testProperty "Word16" (prop_compare_put_with_naive :: [Word16] -> Property)
+      , testProperty "Word32" (prop_compare_put_with_naive :: [Word32] -> Property)
+      -- , testProperty "Word64" (prop_compare_put_with_naive :: [Word64] -> Property)
+      ]
+
+  , testGroup "prop_compare_get_with_naive"
+      [ testProperty "Word8"  (prop_compare_get_with_naive:: [Word8]  -> Property)
+      , testProperty "Word16" (prop_compare_get_with_naive:: [Word16] -> Property)
+      , testProperty "Word32" (prop_compare_get_with_naive:: [Word32] -> Property)
+      -- , testProperty "Word64" (prop_compare_get_with_naive:: [Word64] -> Property)
+      ]
+
   , testGroup "prop_put_with_bitreq"
       [ testProperty "Word8"  (prop_putget_with_bitreq :: Word8  -> Property)
       , testProperty "Word16" (prop_putget_with_bitreq :: Word16 -> Property)
@@ -83,6 +114,8 @@ prop_putget_with_bitreq w = property $
       w' = runGet (runBitGetSimple g) lbs
   in w == w'
 
+-- | Write a list of items. Each item is written with the maximum amount of
+-- bits, i.e. 8 for Word8, 16 for Word16, etc.
 prop_putget_list_simple :: (BinaryBit a, Eq a, Storable a) => [a] -> Property
 prop_putget_list_simple ws = property $
   let s = sizeOf (head ws) * 8
@@ -92,6 +125,8 @@ prop_putget_list_simple ws = property $
       ws' = runGet (runBitGetSimple g) lbs
   in ws == ws'
 
+-- | Write a list of items. Each item is written with exactly as many bits
+-- as required. Then read it back.
 prop_putget_list_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => [a] -> Property
 prop_putget_list_with_bitreq ws = property $
   -- write all words with as many bits as it's required
@@ -102,6 +137,28 @@ prop_putget_list_with_bitreq ws = property $
   in ws == ws'
   where
     bitlist = map bitreq ws
+
+-- | Write bits using this library, and read them back using the binary
+-- library.
+prop_bitput_with_get_from_binary :: (BinaryBit a, Binary a, Storable a, Eq a) => [a] -> Property
+prop_bitput_with_get_from_binary ws = property $
+  let s = sizeOf (head ws) * 8
+      p = mapM_ (putBits s) ws
+      g = mapM (const get) ws
+      lbs = runPut (runBitPut p)
+      ws' = runGet g lbs
+  in ws == ws'
+
+-- | Write bits using the binary library, and read them back using this
+-- library.
+prop_bitget_with_put_from_binary :: (BinaryBit a, Binary a, Storable a, Eq a) => [a] -> Property
+prop_bitget_with_put_from_binary ws = property $
+  let s = sizeOf (head ws) * 8
+      p = mapM_ put ws
+      g = mapM (const (getBits s)) ws
+      lbs = runPut p
+      ws' = runGet (runBitGetSimple g) lbs
+  in ws == ws'
 
 -- number of bits required to write 'v'
 bitreq :: (Num b, Bits a, Ord a) => a -> b
@@ -129,6 +186,42 @@ prop_composite_case b w = w < 0x8000 ==>
       lbs = runPut (runBitPut p)
       w' = runGet (runBitGetSimple g) lbs
   in w == w'
+
+
+prop_compare_put_with_naive :: (Bits a, BinaryBit a, Ord a) => [a] -> Property
+prop_compare_put_with_naive ws = property $
+  let pn = mapM_ (\v -> naive_put (bitreq v) v) ws
+      p  = mapM_ (\v -> putBits   (bitreq v) v) ws
+      lbs_n = runPut (runBitPut pn)
+      lbs   = runPut (runBitPut p)
+  in lbs_n == lbs
+
+prop_compare_get_with_naive :: (Bits a, BinaryBit a, Ord a, Num a) => [a] -> Property
+prop_compare_get_with_naive ws = property $
+  let gn = mapM  (\v -> naive_get (bitreq v)) ws
+      g  = mapM  (\v -> getBits   (bitreq v)) ws
+      p  = mapM_ (\v -> naive_put (bitreq v) v) ws
+      lbs = runPut (runBitPut p)
+      rn = runGet (runBitGetSimple gn) lbs
+      r  = runGet (runBitGetSimple g ) lbs
+      -- we must help our compiler to resolve the types of 'gn' and 'g'
+      types = rn == ws && r == ws
+  in rn == r
+
+-- | Write one bit at a time until the full word has been written
+naive_put :: (Bits a) => Int -> a -> BitPut ()
+naive_put n w = mapM_ (\b -> putBool (testBit w b)) [n-1,n-2..0]
+
+-- | Read one bit at a time until we've reconstructed the whole word
+naive_get :: (Bits a, Num a) => Int -> BitGet a
+naive_get n0 =
+  let loop 0 acc = return acc
+      loop n acc = do
+        b <- getBool
+        case b of
+          False -> loop (n-1) (acc `shiftL` 1)
+          True  -> loop (n-1) ((acc `shiftL` 1) + 1)
+  in loop n0 0
 
 {-
 prop_Word32_from_Word8_and_Word16 :: Word8 -> Word16 -> Property
