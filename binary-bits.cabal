@@ -35,3 +35,4 @@ test-suite qc
                  QuickCheck>=2, random,
                  test-framework,
                  test-framework-quickcheck2
+  ghc-options: -fhpc
