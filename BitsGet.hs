@@ -1,13 +1,7 @@
 {-# LANGUAGE GADTs, RankNTypes, MagicHash, CPP #-}
 
 module BitsGet
-            ( -- R(..),
-            T(..)
-            -- , get
-            -- , getR
-            , readBool
-            , readWord8
-            , readWord16be
+            ( T(..)
             , runBitGet
             , runBitGetSimple
             , BitGet
@@ -15,6 +9,10 @@ module BitsGet
             , getWord8
             , getWord16be
             , getWord32be
+
+            , readBool
+            , readWord8
+            , readWord16be
 
             ) where
 
@@ -136,13 +134,16 @@ readWithoutOffset s@(S bs o) shifterL shifterR n
               in (bn (segs-1) :*: incS s n)
 
   | n <= 64 = let segs = byte_offset n
+                  o' = bit_offset (n - 8 + o)
 
                   bn 0 = fromIntegral (unsafeHead bs)
                   bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
 
+                  msegs = bn segs `shifterL` o'
+
                   last = (fromIntegral (unsafeIndex bs (segs + 1))) `shifterR` (8 - (bit_offset n))
 
-                  w = bn segs .|. last
+                  w = msegs .|. last
               in w :*: incS s n
 
 readWithOffset s@(S bs o) shifterL shifterR n
