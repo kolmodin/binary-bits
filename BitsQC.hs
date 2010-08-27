@@ -51,35 +51,35 @@ tests =
       [ testProperty "Word8"  (prop_bitput_with_get_from_binary :: [Word8]  -> Property)
       , testProperty "Word16" (prop_bitput_with_get_from_binary :: [Word16] -> Property)
       , testProperty "Word32" (prop_bitput_with_get_from_binary :: [Word32] -> Property)
-      -- , testProperty "Word64" (prop_bitput_with_get_from_binary :: [Word64] -> Property)
+      , testProperty "Word64" (prop_bitput_with_get_from_binary :: [Word64] -> Property)
       ]
 
   , testGroup "prop_bitget_with_put_from_binary"
       [ testProperty "Word8"  (prop_bitget_with_put_from_binary :: [Word8]  -> Property)
       , testProperty "Word16" (prop_bitget_with_put_from_binary :: [Word16] -> Property)
       , testProperty "Word32" (prop_bitget_with_put_from_binary :: [Word32] -> Property)
-      -- , testProperty "Word64" (prop_bitget_with_put_from_binary :: [Word64] -> Property)
+      , testProperty "Word64" (prop_bitget_with_put_from_binary :: [Word64] -> Property)
       ]
 
   , testGroup "prop_compare_put_with_naive"
       [ testProperty "Word8"  (prop_compare_put_with_naive :: [Word8]  -> Property)
       , testProperty "Word16" (prop_compare_put_with_naive :: [Word16] -> Property)
       , testProperty "Word32" (prop_compare_put_with_naive :: [Word32] -> Property)
-      -- , testProperty "Word64" (prop_compare_put_with_naive :: [Word64] -> Property)
+      , testProperty "Word64" (prop_compare_put_with_naive :: [Word64] -> Property)
       ]
 
   , testGroup "prop_compare_get_with_naive"
       [ testProperty "Word8"  (prop_compare_get_with_naive:: [Word8]  -> Property)
       , testProperty "Word16" (prop_compare_get_with_naive:: [Word16] -> Property)
       , testProperty "Word32" (prop_compare_get_with_naive:: [Word32] -> Property)
-      -- , testProperty "Word64" (prop_compare_get_with_naive:: [Word64] -> Property)
+      , testProperty "Word64" (prop_compare_get_with_naive:: [Word64] -> Property)
       ]
 
   , testGroup "prop_put_with_bitreq"
       [ testProperty "Word8"  (prop_putget_with_bitreq :: Word8  -> Property)
       , testProperty "Word16" (prop_putget_with_bitreq :: Word16 -> Property)
       , testProperty "Word32" (prop_putget_with_bitreq :: Word32 -> Property)
-      -- , testProperty "Word64" (prop_putget_with_bitreq :: Word64 -> Property)
+      , testProperty "Word64" (prop_putget_with_bitreq :: Word64 -> Property)
       ]
 
   , testGroup "prop_putget_list_simple"
@@ -87,14 +87,14 @@ tests =
       , testProperty "Word8" (prop_putget_list_simple :: [Word8]  -> Property)
       , testProperty "Word16" (prop_putget_list_simple :: [Word16] -> Property)
       , testProperty "Word32" (prop_putget_list_simple :: [Word32] -> Property)
-      -- , testProperty "Word64" (prop_putget_list_simple :: [Word64] -> Property)
+      , testProperty "Word64" (prop_putget_list_simple :: [Word64] -> Property)
       ]
 
   , testGroup "prop_putget_list_with_bitreq"
       [ testProperty "Word8"  (prop_putget_list_with_bitreq :: [Word8]  -> Property)
       , testProperty "Word16" (prop_putget_list_with_bitreq :: [Word16] -> Property)
       , testProperty "Word32" (prop_putget_list_with_bitreq :: [Word32] -> Property)
-      -- , testProperty "Word64"  (prop_putget_list_with_bitreq :: [Word64] -> Property)
+      , testProperty "Word64"  (prop_putget_list_with_bitreq :: [Word64] -> Property)
       ]
   ]
 

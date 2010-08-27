@@ -28,6 +28,9 @@ data PairS a = PairS a {-# UNPACK #-} !S
 
 data S = S !Builder !Word8 !Int
 
+instance Show S where
+  show (S _ w o) = "S( " ++ show w ++ " : " ++ show o ++ ")"
+
 putBool :: Bool -> BitPut ()
 putBool b = putWord8 1 (if b then 1 else 0)
 

@@ -25,8 +25,6 @@ instance BinaryBit Word32 where
   putBits = putWord32be
   getBits = getWord32be
 
-{-
 instance BinaryBit Word64 where
   putBits = putWord64be
   getBits = getWord64be
--}

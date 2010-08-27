@@ -11,6 +11,7 @@ module BitsGet
             , getWord8
             , getWord16be
             , getWord32be
+            , getWord64be
 
             , readBool
             , readWord8
@@ -199,7 +200,7 @@ readWord32be s@(S bs o) n
   | otherwise = error "readWord32be: tried to read more than 32 bits"
 
 
-readWord64be :: S -> Int -> T Word32 S
+readWord64be :: S -> Int -> T Word64 S
 readWord64be s@(S bs o) n
   -- 8 or fewer bits, use readWord8
   | n <= 8 = let w :*: s' = readWord8 s n
@@ -209,9 +210,9 @@ readWord64be s@(S bs o) n
   | n <= 16 = let w :*: s' = readWord16be s n
               in fromIntegral w :*: s'
 
-  | o == 0 = readWithoutOffset s shiftl_w32 shiftr_w32 n
+  | o == 0 = readWithoutOffset s shiftl_w64 shiftr_w64 n
 
-  | n <= 64 = readWithOffset s shiftl_w32 shiftr_w32 n
+  | n <= 64 = readWithOffset s shiftl_w64 shiftr_w64 n
 
   | otherwise = error "readWord64be: tried to read more than 64 bits"
 
@@ -273,13 +274,16 @@ getBool = ensure 1 >> modifyState readBool
 
 getWord8 :: Int -> BitGet Word8
 getWord8 n = ensure n >> modifyState (flip readWord8 n)
-  
+
 getWord16be :: Int -> BitGet Word16
 getWord16be n = ensure n >> modifyState (flip readWord16be n)
 
 getWord32be :: Int -> BitGet Word32
 getWord32be n = ensure n >> modifyState (flip readWord32be n)
- 
+
+getWord64be :: Int -> BitGet Word64
+getWord64be n = ensure n >> modifyState (flip readWord64be n)
+
 getState :: BitGet S
 getState = C $ \s kf ks -> ks s s
 
