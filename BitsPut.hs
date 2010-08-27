@@ -1,6 +1,7 @@
 module BitsPut
           ( BitPut
           , runBitPut
+          , joinPut
 
           , putBool
           , putWord8
@@ -12,6 +13,8 @@ module BitsPut
 import qualified Data.Binary.Builder as B
 import Data.Binary.Builder ( Builder )
 import qualified Data.Binary.Put as Put
+import Data.Binary.Put ( Put )
+
 import Data.ByteString
 
 import Data.Bits
@@ -74,18 +77,28 @@ putWord64be :: Int -> Word64 -> BitPut ()
 putWord64be n w
   | n <= 16 = putWord16be n (fromIntegral w)
 
+joinPut :: Put -> BitPut ()
+joinPut m = BitPut $ \s0 -> PairS () $
+  let (S b0 _ _) = flushIncomplete s0
+      b = Put.execPut m
+  in (S (b0`mappend`b) 0 0)
+
 flush :: S -> S
 flush s@(S b w o)
   | o > 8 = error "flush: offset > 8"
   | o == 8 = S (b `mappend` B.singleton w) 0 0
   | otherwise = s
 
+flushIncomplete :: S -> S
+flushIncomplete s@(S b w o)
+  | o == 0 = s
+  | otherwise = (S (b `mappend` B.singleton w) 0 0)
+
 runBitPut :: BitPut () -> Put.Put
 runBitPut m = Put.putBuilder b'
   where
-  PairS _ (S b t o) = run m (S mempty 0 0)
-  b' | o == 0 = b
-     | otherwise = b `mappend` B.singleton t
+  PairS _ s@(S b t o) = run m (S mempty 0 0)
+  (S b' _ _) = flushIncomplete s
 
 instance Monad BitPut where
   m >>= k = BitPut $ \s ->
