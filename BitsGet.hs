@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, RankNTypes, MagicHash, CPP #-}
+{-# LANGUAGE RankNTypes, MagicHash, CPP #-}
 
 module BitsGet
             ( T(..)
