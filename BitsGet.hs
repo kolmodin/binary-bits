@@ -259,8 +259,8 @@ runBitGet bg = do
       putS bs''
       return (Right x)
 
-ensure :: Int -> BitGet ()
-ensure n = C $ \s kf ks ->
+ensureBits :: Int -> BitGet ()
+ensureBits n = C $ \s kf ks ->
   let loop (S bs o) | n <= (B.length bs * 8 - o) = ks (S bs o) ()
                     | otherwise = do
                         needMore
@@ -270,19 +270,19 @@ ensure n = C $ \s kf ks ->
   in loop s
 
 getBool :: BitGet Bool
-getBool = ensure 1 >> modifyState readBool
+getBool = ensureBits 1 >> modifyState readBool
 
 getWord8 :: Int -> BitGet Word8
-getWord8 n = ensure n >> modifyState (flip readWord8 n)
+getWord8 n = ensureBits n >> modifyState (flip readWord8 n)
 
 getWord16be :: Int -> BitGet Word16
-getWord16be n = ensure n >> modifyState (flip readWord16be n)
+getWord16be n = ensureBits n >> modifyState (flip readWord16be n)
 
 getWord32be :: Int -> BitGet Word32
-getWord32be n = ensure n >> modifyState (flip readWord32be n)
+getWord32be n = ensureBits n >> modifyState (flip readWord32be n)
 
 getWord64be :: Int -> BitGet Word64
-getWord64be n = ensure n >> modifyState (flip readWord64be n)
+getWord64be n = ensureBits n >> modifyState (flip readWord64be n)
 
 getState :: BitGet S
 getState = C $ \s kf ks -> ks s s
