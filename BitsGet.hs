@@ -5,7 +5,7 @@ module BitsGet
             , runBitGet
             , runBitGetSimple
             , BitGet
-            , joinGet
+            -- , joinGet
 
             , getBool
             , getWord8
@@ -68,6 +68,7 @@ incS (S bs n) o =
   let (d,n') = divMod (n+o) 8
   in S (unsafeDrop d bs) n'
 
+{-
 joinGet :: Get a -> BitGet a
 joinGet m = C $ \s@(S bs o) kf ks -> do
   -- put back the rest of the current chunk
@@ -80,6 +81,7 @@ joinGet m = C $ \s@(S bs o) kf ks -> do
   bs' <- getS
   let s' = S bs' 0
   ks s' a
+-}
 
 readByteString :: S -> Int -> T ByteString S
 readByteString s@(S bs o) n
