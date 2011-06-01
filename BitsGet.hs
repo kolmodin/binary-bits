@@ -45,7 +45,7 @@ data S = S !ByteString -- ^ Input
            !Int -- ^ Bit offset (0-7)
           deriving (Show)
 
--- make_mask 3 = 00000111
+-- | make_mask 3 = 00000111
 make_mask :: Bits a => Int -> a
 make_mask n = (1 `shiftL` fromIntegral n) - 1
 {-# SPECIALIZE make_mask :: Int -> Word #-}
@@ -265,6 +265,7 @@ runBitGet bg = do
       putS bs''
       return (Right x)
 
+-- | Make sure there are at lest @n@ bits.
 ensureBits :: Int -> BitGet ()
 ensureBits n = C $ \s kf ks ->
   let loop (S bs o) | n <= (B.length bs * 8 - o) = ks (S bs o) ()
