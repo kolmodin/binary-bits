@@ -21,23 +21,12 @@ import BitsPut
 
 import Test.Framework.Options ( TestOptions'(..) )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
-import Test.Framework.Runners.Console ( defaultMainWithOpts )
+import Test.Framework.Runners.Console ( defaultMain )
 import Test.Framework.Runners.Options ( RunnerOptions'(..) )
 import Test.Framework ( Test, testGroup )
 import Test.QuickCheck
 
-main = do
-  args <- getArgs
-  defaultMainWithOpts tests (setMaxTestCases (if null args then 1024 else read (head args)))
-  where
-  -- increase the number of test cases
-  setMaxTestCases n =
-    mempty
-      { ropt_test_options = Just $
-          mempty
-            { topt_maximum_generated_tests = Just n
-            }
-      }
+main = defaultMain tests
 
 tests :: [Test]
 tests =
