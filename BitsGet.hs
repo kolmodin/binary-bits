@@ -19,7 +19,7 @@ module BitsGet
 
             ) where
 
-import Data.Binary.Get ( runGet, Get, needMore, getByteString, getS, putS )
+import Data.Binary.Get ( runGet, Get, getByteString )
 
 import Data.ByteString as B
 import Data.ByteString.Internal
@@ -254,15 +254,11 @@ runBitGetSimple bg = do
 
 runBitGet :: BitGet a -> Get (Either String a)
 runBitGet bg = do
-  bs <- getS -- get the current chunk
-  putS B.empty
+  let bs = B.empty -- initial state
   v <- runCont bg (S bs 0) (\str -> return (Left str)) (\s a -> return (Right (s, a)))
   case v of
     Left err -> return (Left err)
-    Right ((S bs' n), x) -> do
-      let bs'' | n > 0 = B.tail bs'
-               | otherwise = bs'
-      putS bs''
+    Right ((S _bs' _n), x) -> do
       return (Right x)
 
 -- | Make sure there are at lest @n@ bits.
@@ -270,9 +266,10 @@ ensureBits :: Int -> BitGet ()
 ensureBits n = C $ \s kf ks ->
   let loop (S bs o) | n <= (B.length bs * 8 - o) = ks (S bs o) ()
                     | otherwise = do
-                        needMore
-                        bs' <- getS
-                        putS B.empty
+                        let currentBits = B.length bs * 8 - o
+                        let byteCount = (n - currentBits + 7) `div` 8
+                        bs' <- getByteString byteCount
+                        -- should always be enough going once throguh the loop
                         loop (S (bs`append`bs') o)
   in loop s
 
