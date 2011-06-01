@@ -138,6 +138,8 @@ readWord16be s@(S bs o) n
 
   | otherwise = error "readWord16be: tried to read more than 16 bits"
 
+readWithoutOffset :: (Bits a, Num a)
+                  => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> T a S
 readWithoutOffset s@(S bs o) shifterL shifterR n
   | o /= 0 = error "readWithoutOffset: there is an offset"
 
@@ -161,6 +163,8 @@ readWithoutOffset s@(S bs o) shifterL shifterR n
                   w = msegs .|. last
               in w :*: incS s n
 
+readWithOffset :: (Bits a, Num a)
+	       => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> T a S
 readWithOffset s@(S bs o) shifterL shifterR n
   | n <= 64 = let bits_in_msb = 8 - o
                   (n',top) = (n - bits_in_msb
