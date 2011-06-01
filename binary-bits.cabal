@@ -23,12 +23,15 @@ library
   exposed-modules:     BitsGet, BitsPut, Bits
 
   build-depends: base==4.*, binary, bytestring
+  default-language:    Haskell98
+
   -- other-modules:
   -- build-tools:
 
 test-suite qc
   type: exitcode-stdio-1.0
   main-is: BitsQC.hs
+  default-language:    Haskell98
 
   build-depends: binary-bits, binary,
                  base==4.*, haskell98, bytestring,
