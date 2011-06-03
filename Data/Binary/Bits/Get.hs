@@ -13,13 +13,15 @@ module Data.Binary.Bits.Get
             , getWord32be
             , getWord64be
 
+            , Data.Binary.Bits.Get.getByteString
+
             , readBool
             , readWord8
             , readWord16be
 
             ) where
 
-import Data.Binary.Get ( runGet, Get, getByteString )
+import Data.Binary.Get as B ( runGet, Get, getByteString )
 
 import Data.ByteString as B
 import Data.ByteString.Internal
@@ -268,7 +270,7 @@ ensureBits n = C $ \s kf ks ->
                     | otherwise = do
                         let currentBits = B.length bs * 8 - o
                         let byteCount = (n - currentBits + 7) `div` 8
-                        bs' <- getByteString byteCount
+                        bs' <- B.getByteString byteCount
                         -- should always be enough going once throguh the loop
                         loop (S (bs`append`bs') o)
   in loop s
@@ -287,6 +289,15 @@ getWord32be n = ensureBits n >> modifyState (flip readWord32be n)
 
 getWord64be :: Int -> BitGet Word64
 getWord64be n = ensureBits n >> modifyState (flip readWord64be n)
+
+getByteString :: Int -> BitGet ByteString
+getByteString n = do
+  ensureBits (n*8)
+  -- drop the first byte if we've started to use it
+  modifyState $ \s@(S bs o) ->
+                  let bs' | o == 0 = bs
+                          | otherwise = B.tail bs
+                  in B.take n bs' :*: S (B.drop n bs') 0
 
 getState :: BitGet S
 getState = C $ \s kf ks -> ks s s
