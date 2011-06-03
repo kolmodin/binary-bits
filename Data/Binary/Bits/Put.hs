@@ -1,4 +1,4 @@
-module BitsPut
+module Data.Binary.Bits.Put
           ( BitPut
           , runBitPut
           , joinPut

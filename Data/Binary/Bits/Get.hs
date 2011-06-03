@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, MagicHash, CPP #-}
 
-module BitsGet
+module Data.Binary.Bits.Get
             ( T(..)
             , runBitGet
             , runBitGetSimple

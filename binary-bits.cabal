@@ -20,9 +20,12 @@ cabal-version:       >=1.10
 
 
 library
-  exposed-modules:     BitsGet, BitsPut, Bits
-
   build-depends: base==4.*, binary, bytestring
+
+  exposed-modules:     Data.Binary.Bits ,
+                       Data.Binary.Bits.Put ,
+                       Data.Binary.Bits.Get
+
   default-language:    Haskell98
 
   -- other-modules:

@@ -1,7 +1,7 @@
-module Bits where
+module Data.Binary.Bits where
 
-import BitsGet
-import BitsPut
+import Data.Binary.Bits.Get
+import Data.Binary.Bits.Put
 
 import Data.Word
 
