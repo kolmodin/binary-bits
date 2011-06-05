@@ -8,6 +8,7 @@ module Data.Binary.Bits.Put
           , putWord16be
           , putWord32be
           , putWord64be
+          , putByteString
           )
           where
 
@@ -83,6 +84,15 @@ putWord64be n w
   | otherwise = do
       putWord64be (n-32) (w`shiftR`32)
       putWord64be    32  (w .&. 0xffffffff)
+
+putByteString :: ByteString -> BitPut ()
+putByteString bs = do
+  offset <- hasOffset
+  if offset
+    then mapM_ (putWord8 8) (unpack bs) -- naive
+    else joinPut (Put.putByteString bs)
+  where
+    hasOffset = BitPut $ \ s@(S _ _ o) -> PairS (o /= 0) s
 
 joinPut :: Put -> BitPut ()
 joinPut m = BitPut $ \s0 -> PairS () $
