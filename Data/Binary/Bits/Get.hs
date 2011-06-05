@@ -290,6 +290,8 @@ getWord32be n = ensureBits n >> modifyState (flip readWord32be n)
 getWord64be :: Int -> BitGet Word64
 getWord64be n = ensureBits n >> modifyState (flip readWord64be n)
 
+-- | Get a @ByteString@. Drops the current byte if we've started to read
+-- from it.
 getByteString :: Int -> BitGet ByteString
 getByteString n = do
   ensureBits (n*8)
