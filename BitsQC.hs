@@ -9,7 +9,9 @@ import Data.Binary.Put ( runPut )
 import qualified Data.Binary.Get as BG ( getWord8, getWord16be, getWord32be, getWord64be )
 import qualified Data.Binary.Put as BP ( putWord8, putWord16be, putWord32be, putWord64be )
 
-import Bits
+import Data.Binary.Bits
+import Data.Binary.Bits.Get
+import Data.Binary.Bits.Put
 
 import Control.Applicative
 import Data.Bits
@@ -18,9 +20,6 @@ import Data.Word
 import Foreign.Storable
 import System.Random
 import System
-
-import BitsGet
-import BitsPut
 
 import Test.Framework.Options ( TestOptions'(..) )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
