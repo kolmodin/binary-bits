@@ -5,7 +5,6 @@ module Data.Binary.Bits.Get
             , runBitGet
             , runBitGetSimple
             , BitGet
-            -- , joinGet
 
             , getBool
             , getWord8
@@ -36,7 +35,7 @@ import Data.List as List ( reverse )
 import Control.Applicative
 
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
-import GHC.Base hiding ( (:*:) )
+import GHC.Base
 import GHC.Word
 import GHC.Int
 #endif
@@ -69,21 +68,6 @@ incS (S bs n) 1 =
 incS (S bs n) o =
   let (d,n') = divMod (n+o) 8
   in S (unsafeDrop d bs) n'
-
-{-
-joinGet :: Get a -> BitGet a
-joinGet m = C $ \s@(S bs o) kf ks -> do
-  -- put back the rest of the current chunk
-  case o of
-    0 -> putS bs
-    _ -> putS (unsafeTail bs)
-  -- run the get function
-  a <- m
-  -- whatever is left, get it and us it as our state
-  bs' <- getS
-  let s' = S bs' 0
-  ks s' a
--}
 
 readByteString :: S -> Int -> T ByteString S
 readByteString s@(S bs o) n
@@ -228,17 +212,15 @@ readWord64be s@(S bs o) n
 -- unrolled codensity/state monad
 newtype BitGet a = C { runCont :: forall r.
                                   S -> 
-                                  Failure   r ->
                                   Success a r ->
-                                  Get (Either String r) }
+                                  Get r }
 
-type Failure   r = String -> Get (Either String r)
-type Success a r = S -> a -> Get (Either String r)
+type Success a r = S -> a -> Get r
 
 instance Monad BitGet where
-  return x = C $ \s kf ks -> ks s x
-  fail str = C $ \s kf ks -> kf str
-  (C c) >>= f = C $ \s kf ks -> c s kf (\s' a -> runCont (f a) s' kf ks)
+  return x = C $ \s ks -> ks s x
+  fail str = C $ \s ks -> fail str
+  (C c) >>= f = C $ \s ks -> c s (\s' a -> runCont (f a) s' ks)
 
 instance Functor BitGet where
   fmap f m = m >>= \a -> return (f a)
@@ -248,24 +230,14 @@ instance Applicative BitGet where
   fm <*> m = fm >>= \f -> m >>= \v -> return (f v)
 
 runBitGetSimple :: BitGet a -> Get a
-runBitGetSimple bg = do
-  v <- runBitGet bg
-  case v of
-    Left err -> fail err
-    Right v -> return v
+runBitGetSimple bg = runBitGet bg
 
-runBitGet :: BitGet a -> Get (Either String a)
-runBitGet bg = do
-  let bs = B.empty -- initial state
-  v <- runCont bg (S bs 0) (\str -> return (Left str)) (\s a -> return (Right (s, a)))
-  case v of
-    Left err -> return (Left err)
-    Right ((S _bs' _n), x) -> do
-      return (Right x)
+runBitGet :: BitGet a -> Get a
+runBitGet bg = runCont bg (S B.empty 0) (\_s a -> return a)
 
 -- | Make sure there are at lest @n@ bits.
 ensureBits :: Int -> BitGet ()
-ensureBits n = C $ \s kf ks ->
+ensureBits n = C $ \s ks ->
   let loop (S bs o) | n <= (B.length bs * 8 - o) = ks (S bs o) ()
                     | otherwise = do
                         let currentBits = B.length bs * 8 - o
@@ -302,14 +274,14 @@ getByteString n = do
                   in B.take n bs' :*: S (B.drop n bs') 0
 
 getState :: BitGet S
-getState = C $ \s kf ks -> ks s s
+getState = C $ \s ks -> ks s s
 
 putState :: S -> BitGet ()
-putState s = C $ \_ kf ks -> ks s ()
+putState s = C $ \_ ks -> ks s ()
 
 modifyState :: (S -> (T a S)) -> BitGet a
-modifyState f = C $ \s kf ks -> case f s of
-                                  w :*: s' -> ks s' w
+modifyState f = C $ \s ks -> case f s of
+                               w :*: s' -> ks s' w
 
 ------------------------------------------------------------------------
 -- Unchecked shifts, from the package binary
