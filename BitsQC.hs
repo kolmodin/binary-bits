@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, TupleSections #-}
 
 module Main where
 
@@ -13,13 +13,14 @@ import Data.Binary.Bits
 import Data.Binary.Bits.Get
 import Data.Binary.Bits.Put
 
+import qualified Data.ByteString as B
+
 import Control.Applicative
 import Data.Bits
 import Data.Monoid
 import Data.Word
 import Foreign.Storable
 import System.Random
-import System
 
 import Test.Framework.Options ( TestOptions'(..) )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
@@ -85,7 +86,13 @@ tests =
       [ testProperty "Word8"  (prop_putget_list_with_bitreq :: W [Word8]  -> Property)
       , testProperty "Word16" (prop_putget_list_with_bitreq :: W [Word16] -> Property)
       , testProperty "Word32" (prop_putget_list_with_bitreq :: W [Word32] -> Property)
-      , testProperty "Word64"  (prop_putget_list_with_bitreq :: W [Word64] -> Property)
+      , testProperty "Word64" (prop_putget_list_with_bitreq :: W [Word64] -> Property)
+      ]
+  , testGroup "prop_bitget_bytestring_interspersed"
+      [ testProperty "Word8"  (prop_bitget_bytestring_interspersed :: W Word8  -> [B.ByteString] -> Property)
+      , testProperty "Word16" (prop_bitget_bytestring_interspersed :: W Word16 -> [B.ByteString] -> Property)
+      , testProperty "Word32" (prop_bitget_bytestring_interspersed :: W Word32 -> [B.ByteString] -> Property)
+      , testProperty "Word64" (prop_bitget_bytestring_interspersed :: W Word64 -> [B.ByteString] -> Property)
       ]
   ]
 
@@ -102,7 +109,7 @@ prop_putget_with_bitreq (W w) = property $
   let p = putBits (bitreq w) w
       g = getBits (bitreq w)
       lbs = runPut (runBitPut p)
-      w' = runGet (runBitGetSimple g) lbs
+      w' = runGet (runBitGet g) lbs
   in w == w'
 
 -- | Write a list of items. Each item is written with the maximum amount of
@@ -113,7 +120,7 @@ prop_putget_list_simple (W ws) = property $
       p = mapM_ (\v -> putBits s v) ws
       g = mapM  (const (getBits s)) ws
       lbs = runPut (runBitPut p)
-      ws' = runGet (runBitGetSimple g) lbs
+      ws' = runGet (runBitGet g) lbs
   in ws == ws'
 
 -- | Write a list of items. Each item is written with exactly as many bits
@@ -124,7 +131,7 @@ prop_putget_list_with_bitreq (W ws) = property $
   let p = mapM_ (\v -> putBits (bitreq v) v) ws
       g = mapM getBits bitlist
       lbs = runPut (runBitPut p)
-      ws' = runGet (runBitGetSimple g) lbs
+      ws' = runGet (runBitGet g) lbs
   in ws == ws'
   where
     bitlist = map bitreq ws
@@ -148,10 +155,19 @@ prop_bitget_with_put_from_binary (W ws) = property $
       p = mapM_ put ws
       g = mapM (const (getBits s)) ws
       lbs = runPut p
-      ws' = runGet (runBitGetSimple g) lbs
+      ws' = runGet (runBitGet g) lbs
   in ws == ws'
 
--- number of bits required to write 'v'
+-- | Write each 'ByteString' with a variable sized value as a separator.
+prop_bitget_bytestring_interspersed :: (BinaryBit a, Binary a, Num a, Ord a, Bits a) => W a -> [B.ByteString] -> Property
+prop_bitget_bytestring_interspersed (W ws) bss = property $
+  let p = mapM_ (\bs -> putBits (bitreq ws) ws >> putByteString bs) bss
+      g = mapM (\bs -> (,) <$> (getBits (bitreq ws)) <*> (getByteString (B.length bs))) bss
+      lbs = runPut (runBitPut p)
+      r = runGet (runBitGet g) lbs
+  in map (ws,) bss == r
+
+-- number of bits required to write @v@
 bitreq :: (Num b, Bits a, Ord a) => a -> b
 bitreq v = fromIntegral . head $ [ req | (req, top) <- bittable, v <= top ]
 
@@ -175,7 +191,7 @@ prop_composite_case b (W w) = w < 0x8000 ==>
                 lsb <- getWord8 8
                 return ((fromIntegral msb `shiftL` 8) .|. fromIntegral lsb)
       lbs = runPut (runBitPut p)
-      w' = runGet (runBitGetSimple g) lbs
+      w' = runGet (runBitGet g) lbs
   in w == w'
 
 
@@ -193,8 +209,8 @@ prop_compare_get_with_naive (W ws) = property $
       g  = mapM  (\v -> getBits   (bitreq v)) ws
       p  = mapM_ (\v -> naive_put (bitreq v) v) ws
       lbs = runPut (runBitPut p)
-      rn = runGet (runBitGetSimple gn) lbs
-      r  = runGet (runBitGetSimple g ) lbs
+      rn = runGet (runBitGet gn) lbs
+      r  = runGet (runBitGet g ) lbs
       -- we must help our compiler to resolve the types of 'gn' and 'g'
       types = rn == ws && r == ws
   in rn == r
@@ -271,6 +287,10 @@ instance Arbitrary (W Word32) where
 instance Arbitrary (W Word64) where
     arbitrary       = W <$> choose (minBound, maxBound)
     shrink          = map W . shrinker . unW
+
+instance Arbitrary B.ByteString where
+    arbitrary       = B.pack <$> arbitrary
+    shrink bs       = B.pack <$> shrink (B.unpack bs)
 
 integralRandomR :: (Integral a, RandomGen g) => (a,a) -> g -> (a,g)
 integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
