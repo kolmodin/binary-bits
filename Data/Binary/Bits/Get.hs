@@ -1,9 +1,8 @@
-{-# LANGUAGE RankNTypes, MagicHash, CPP #-}
+{-# LANGUAGE RankNTypes, MagicHash, BangPatterns, CPP #-}
 
 module Data.Binary.Bits.Get
             ( T(..)
             , runBitGet
-            , runBitGetSimple
             , BitGet
 
             , getBool
@@ -11,6 +10,14 @@ module Data.Binary.Bits.Get
             , getWord16be
             , getWord32be
             , getWord64be
+
+            , bool
+            , word8
+            , word16be
+            , word32be
+            , word64be
+
+            , block
 
             , Data.Binary.Bits.Get.getByteString
 
@@ -34,6 +41,8 @@ import Data.List as List ( reverse )
 
 import Control.Applicative
 
+import Prelude as P
+
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
 import GHC.Base
 import GHC.Word
@@ -46,45 +55,61 @@ data S = S !ByteString -- ^ Input
            !Int -- ^ Bit offset (0-7)
           deriving (Show)
 
+-- | A block that will be read with only one boundry check.
+data Block a = Block Int (S -> a)
+
+instance Functor Block where
+  fmap f (Block i p) = Block i (\s -> f (p s))
+
+instance Applicative Block where
+  pure a = Block 0 (\_ -> a)
+  (Block i p) <*> (Block j q) = Block (i+j) (\s -> p s $ q (incS i s))
+  (Block i _)  *> (Block j q) = Block (i+j) (q . incS i)
+  (Block i p) <*  (Block j _) = Block (i+j) p
+
+block :: Block a -> BitGet a
+block (Block i p) = do
+  ensureBits i
+  modifyState (\s -> (incS i s, p s))
+
 -- | make_mask 3 = 00000111
 make_mask :: Bits a => Int -> a
 make_mask n = (1 `shiftL` fromIntegral n) - 1
+{-# SPECIALIZE make_mask :: Int -> Int #-}
 {-# SPECIALIZE make_mask :: Int -> Word #-}
 {-# SPECIALIZE make_mask :: Int -> Word8 #-}
 {-# SPECIALIZE make_mask :: Int -> Word16 #-}
 {-# SPECIALIZE make_mask :: Int -> Word32 #-}
 {-# SPECIALIZE make_mask :: Int -> Word64 #-}
 
-readBool :: S -> T Bool S
-readBool s@(S bs n) = testBit (unsafeHead bs) (7-n) :*: incS s 1
+readBool :: S -> Bool
+readBool (S bs n) = testBit (unsafeHead bs) (7-n)
 
-incS :: S -> Int -> S
-incS (S bs n) 1 =
-  let
-      n' = n + 1
-      s' | n' == 8 = S (unsafeTail bs) 0
-         | otherwise = S bs n'
-  in s'
-incS (S bs n) o =
-  let (d,n') = divMod (n+o) 8
+incS :: Int -> S -> S
+incS o (S bs n) =
+  let !o' = (n+o)
+      !d = o' `shiftR` 3
+      !n' = o' .&. make_mask 3
   in S (unsafeDrop d bs) n'
 
-readByteString :: S -> Int -> T ByteString S
-readByteString s@(S bs o) n
-  | o == 0 = unsafeTake n bs :*: (S (unsafeDrop n bs) 0)
-  | otherwise = unsafeTake n (unsafeTail bs) :*: (S (unsafeDrop (n+1) bs) 0)
+readByteString :: Int -> S -> ByteString
+readByteString n s@(S bs o)
+  -- no offset, easy.
+  | o == 0 = unsafeTake n bs
+  -- offset. ugg. this is really naive and slow. but also pretty easy :)
+  | otherwise = B.pack (P.map (readWord8 8) (P.take n (iterate (incS 8) s)))
 
-readWord8 :: S -> Int -> T Word8 S
-readWord8 s@(S bs o) n
+readWord8 :: Int -> S -> Word8
+readWord8 n s@(S bs o)
   -- no bits at all, return 0
-  | n == 0 = 0 :*: s
+  | n == 0 = 0
 
   -- all bits are in the same byte
   -- we just need to shift and mask them right
   | n <= 8 - o = let w = unsafeHead bs
                      m = make_mask n
                      w' = (w `shiftr_w8` (8 - o - n)) .&. m
-                 in w' :*: incS s n
+                 in w'
 
   -- the bits are in two different bytes
   -- make a word16 using both bytes, and then shift and mask
@@ -92,7 +117,7 @@ readWord8 s@(S bs o) n
                      (fromIntegral (unsafeIndex bs 1))
                  m = make_mask n
                  w' = (w `shiftr_w16` (16 - o - n)) .&. m
-             in fromIntegral w' :*: incS s n
+             in fromIntegral w'
 
 bit_offset :: Int -> Int
 bit_offset n = make_mask 3 .&. n
@@ -100,12 +125,11 @@ bit_offset n = make_mask 3 .&. n
 byte_offset :: Int -> Int
 byte_offset n = n `shiftR` 3
 
-readWord16be :: S -> Int -> T Word16 S
-readWord16be s@(S bs o) n
+readWord16be :: Int -> S -> Word16
+readWord16be n s@(S bs o)
 
   -- 8 or fewer bits, use readWord8
-  | n <= 8 = let w :*: s' = readWord8 s n
-             in fromIntegral w :*: s'
+  | n <= 8 = fromIntegral (readWord8 n s)
 
   -- handle 9 or more bits, stored in two bytes
 
@@ -113,13 +137,13 @@ readWord16be s@(S bs o) n
   | o == 0 && n == 16 = let msb = fromIntegral (unsafeHead bs)
                             lsb = fromIntegral (unsafeIndex bs 1)
                             w = (msb `shiftl_w16` 8) .|. lsb
-                        in w :*: incS s n
+                        in w
 
   -- no offset, but not full 16 bytes
   | o == 0 = let msb = fromIntegral (unsafeHead bs)
                  lsb = fromIntegral (unsafeIndex bs 1)
                  w = (msb `shiftl_w16` (n-8)) .|. (lsb `shiftr_w16` (16-n))
-             in w :*: incS s n
+             in w
 
   -- with offset, and n=9-16
   | n <= 16 = readWithOffset s shiftl_w16 shiftr_w16 n
@@ -127,7 +151,7 @@ readWord16be s@(S bs o) n
   | otherwise = error "readWord16be: tried to read more than 16 bits"
 
 readWithoutOffset :: (Bits a, Num a)
-                  => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> T a S
+                  => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> a
 readWithoutOffset s@(S bs o) shifterL shifterR n
   | o /= 0 = error "readWithoutOffset: there is an offset"
 
@@ -136,7 +160,7 @@ readWithoutOffset s@(S bs o) shifterL shifterR n
                   bn 0 = fromIntegral (unsafeHead bs)
                   bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
 
-              in (bn (segs-1) :*: incS s n)
+              in bn (segs-1)
 
   | n <= 64 = let segs = byte_offset n
                   o' = bit_offset (n - 8 + o)
@@ -149,10 +173,10 @@ readWithoutOffset s@(S bs o) shifterL shifterR n
                   last = (fromIntegral (unsafeIndex bs segs)) `shifterR` (8 - o')
 
                   w = msegs .|. last
-              in w :*: incS s n
+              in w
 
 readWithOffset :: (Bits a, Num a)
-	       => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> T a S
+	       => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> a
 readWithOffset s@(S bs o) shifterL shifterR n
   | n <= 64 = let bits_in_msb = 8 - o
                   (n',top) = (n - bits_in_msb
@@ -161,7 +185,6 @@ readWithOffset s@(S bs o) shifterL shifterR n
                   segs = byte_offset n'
 
                   bn 0 = 0
-                  bn 1 = fromIntegral (unsafeIndex bs 1)
                   bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
 
                   o' = bit_offset n'
@@ -172,18 +195,16 @@ readWithOffset s@(S bs o) shifterL shifterR n
                        | otherwise = 0
 
                   w = top .|. mseg .|. last
-              in w :*: incS s n
+              in w
 
 
-readWord32be :: S -> Int -> T Word32 S
-readWord32be s@(S bs o) n
+readWord32be :: Int -> S -> Word32
+readWord32be n s@(S bs o)
   -- 8 or fewer bits, use readWord8
-  | n <= 8 = let w :*: s' = readWord8 s n
-             in fromIntegral w :*: s'
+  | n <= 8 = fromIntegral (readWord8 n s)
 
   -- 16 or fewer bits, use readWord16be
-  | n <= 16 = let w :*: s' = readWord16be s n
-              in fromIntegral w :*: s'
+  | n <= 16 = fromIntegral (readWord16be n s)
 
   | o == 0 = readWithoutOffset s shiftl_w32 shiftr_w32 n
 
@@ -192,15 +213,13 @@ readWord32be s@(S bs o) n
   | otherwise = error "readWord32be: tried to read more than 32 bits"
 
 
-readWord64be :: S -> Int -> T Word64 S
-readWord64be s@(S bs o) n
+readWord64be :: Int -> S -> Word64
+readWord64be n s@(S bs o)
   -- 8 or fewer bits, use readWord8
-  | n <= 8 = let w :*: s' = readWord8 s n
-             in fromIntegral w :*: s'
+  | n <= 8 = fromIntegral (readWord8 n s)
 
   -- 16 or fewer bits, use readWord16be
-  | n <= 16 = let w :*: s' = readWord16be s n
-              in fromIntegral w :*: s'
+  | n <= 16 = fromIntegral (readWord16be n s)
 
   | o == 0 = readWithoutOffset s shiftl_w64 shiftr_w64 n
 
@@ -210,17 +229,13 @@ readWord64be s@(S bs o) n
 
 ------------------------------------------------------------------------
 -- unrolled codensity/state monad
-newtype BitGet a = C { runCont :: forall r.
-                                  S -> 
-                                  Success a r ->
-                                  Get r }
-
-type Success a r = S -> a -> Get r
+newtype BitGet a = B { runState :: S -> Get (S,a) }
 
 instance Monad BitGet where
-  return x = C $ \s ks -> ks s x
-  fail str = C $ \s ks -> fail str
-  (C c) >>= f = C $ \s ks -> c s (\s' a -> runCont (f a) s' ks)
+  return x = B $ \s -> return (s,x)
+  fail str = B $ \_s -> fail str
+  (B f) >>= g = B $ \s -> do (s',a) <- f s
+                             runState (g a) s'
 
 instance Functor BitGet where
   fmap f m = m >>= \a -> return (f a)
@@ -229,59 +244,66 @@ instance Applicative BitGet where
   pure x = return x
   fm <*> m = fm >>= \f -> m >>= \v -> return (f v)
 
-runBitGetSimple :: BitGet a -> Get a
-runBitGetSimple bg = runBitGet bg
-
 runBitGet :: BitGet a -> Get a
-runBitGet bg = runCont bg (S B.empty 0) (\_s a -> return a)
-
--- | Make sure there are at lest @n@ bits.
-ensureBits :: Int -> BitGet ()
-ensureBits n = C $ \s ks ->
-  let loop (S bs o) | n <= (B.length bs * 8 - o) = ks (S bs o) ()
-                    | otherwise = do
-                        let currentBits = B.length bs * 8 - o
-                        let byteCount = (n - currentBits + 7) `div` 8
-                        bs' <- B.getByteString byteCount
-                        -- should always be enough going once throguh the loop
-                        loop (S (bs`append`bs') o)
-  in loop s
-
-getBool :: BitGet Bool
-getBool = ensureBits 1 >> modifyState readBool
-
-getWord8 :: Int -> BitGet Word8
-getWord8 n = ensureBits n >> modifyState (flip readWord8 n)
-
-getWord16be :: Int -> BitGet Word16
-getWord16be n = ensureBits n >> modifyState (flip readWord16be n)
-
-getWord32be :: Int -> BitGet Word32
-getWord32be n = ensureBits n >> modifyState (flip readWord32be n)
-
-getWord64be :: Int -> BitGet Word64
-getWord64be n = ensureBits n >> modifyState (flip readWord64be n)
-
--- | Get a @ByteString@. Drops the current byte if we've started to read
--- from it.
-getByteString :: Int -> BitGet ByteString
-getByteString n = do
-  ensureBits (n*8)
-  -- drop the first byte if we've started to use it
-  modifyState $ \s@(S bs o) ->
-                  let bs' | o == 0 = bs
-                          | otherwise = B.tail bs
-                  in B.take n bs' :*: S (B.drop n bs') 0
+runBitGet bg = do
+  (_,a) <- runState bg (S B.empty 0)
+  return a
 
 getState :: BitGet S
-getState = C $ \s ks -> ks s s
+getState = B $ \s -> return (s,s)
 
 putState :: S -> BitGet ()
-putState s = C $ \_ ks -> ks s ()
+putState s = B $ \_ -> return (s,())
 
-modifyState :: (S -> (T a S)) -> BitGet a
-modifyState f = C $ \s ks -> case f s of
-                               w :*: s' -> ks s' w
+modifyState :: (S -> (S,a)) -> BitGet a
+modifyState f = B $ \s -> return (f s)
+
+-- | Make sure there are at least @n@ bits.
+ensureBits :: Int -> BitGet ()
+ensureBits n = do
+  s@(S bs o) <- getState
+  if n <= (B.length bs * 8 - o)
+    then return ()
+    else do let currentBits = B.length bs * 8 - o
+            let byteCount = (n - currentBits + 7) `div` 8
+            B $ \s -> do bs' <- B.getByteString byteCount
+                         return (S (bs`append`bs') o, ())
+
+getBool :: BitGet Bool
+getBool = block bool
+
+getWord8 :: Int -> BitGet Word8
+getWord8 n = block (word8 n)
+
+getWord16be :: Int -> BitGet Word16
+getWord16be n = block (word16be n)
+
+getWord32be :: Int -> BitGet Word32
+getWord32be n = block (word32be n)
+
+getWord64be :: Int -> BitGet Word64
+getWord64be n = block (word64be n)
+
+getByteString :: Int -> BitGet ByteString
+getByteString n = block (byteString n)
+
+bool :: Block Bool
+bool = Block 1 readBool
+
+word8 :: Int -> Block Word8
+word8 n = Block n (readWord8 n)
+
+word16be :: Int -> Block Word16
+word16be n = Block n (readWord16be n)
+
+word32be :: Int -> Block Word32
+word32be n = Block n (readWord32be n)
+
+word64be :: Int -> Block Word64
+word64be n = Block n (readWord64be n)
+
+byteString :: Int -> Block ByteString
+byteString n = Block (n*8) (readByteString n)
 
 ------------------------------------------------------------------------
 -- Unchecked shifts, from the package binary
