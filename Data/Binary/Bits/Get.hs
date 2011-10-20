@@ -47,8 +47,9 @@ data S = S !ByteString -- ^ Input
            !Int -- ^ Bit offset (0-7)
           deriving (Show)
 
--- | A block that will be read with only one boundry check.
-data Block a = Block Int (S -> a)
+-- | A block that will be read with only one boundry check. Needs to know the
+-- number of bits in advance.
+data Block a = Block !Int (S -> a)
 
 instance Functor Block where
   fmap f (Block i p) = Block i (\s -> f (p s))
