@@ -1,9 +1,8 @@
 {-# LANGUAGE RankNTypes, MagicHash, BangPatterns, CPP #-}
 
 module Data.Binary.Bits.Get
-            ( T(..)
+            ( BitGet
             , runBitGet
-            , BitGet
 
             , getBool
             , getWord8
@@ -20,11 +19,6 @@ module Data.Binary.Bits.Get
             , block
 
             , Data.Binary.Bits.Get.getByteString
-
-            , readBool
-            , readWord8
-            , readWord16be
-
             ) where
 
 import Data.Binary.Get as B ( runGet, Get, getByteString )
