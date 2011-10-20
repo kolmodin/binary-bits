@@ -43,8 +43,8 @@ import GHC.Word
 import GHC.Int
 #endif
 
-data S = S !ByteString -- ^ Input
-           !Int -- ^ Bit offset (0-7)
+data S = S !ByteString -- Input
+           !Int -- Bit offset (0-7)
           deriving (Show)
 
 -- | A block that will be read with only one boundry check. Needs to know the
@@ -60,6 +60,31 @@ instance Applicative Block where
   (Block i _)  *> (Block j q) = Block (i+j) (q . incS i)
   (Block i p) <*  (Block j _) = Block (i+j) p
 
+-- | Get a block. Guaranteed to be done with one single boundry check, and must
+-- therefore require a statically known number of bits.
+-- Build blocks using 'bool', 'word8', 'word16be', 'word32be', 'word64be' and 'Applicative'.
+--
+-- @
+-- data IPV6Header = IPV6Header {
+--     ipv6Version :: 'Word8'
+--   , ipv6TrafficClass :: 'Word8'
+--   , ipv6FlowLabel :: 'Word32
+--   , ipv6PayloadLength :: 'Word16'
+--   , ipv6NextHeader :: 'Word8'
+--   , ipv6HopLimit :: 'Word8'
+--   , ipv6SourceAddress :: 'ByteString'
+--   , ipv6DestinationAddress :: 'ByteString'
+-- }
+--
+-- parse = IPV6Header '<$>' 'word8' 4
+--                    '<*>' 'word8' 8
+--                    '<*>' 'word32be' 24
+--                    '<*>' 'word16be' 16
+--                    '<*>' 'word8' 8
+--                    '<*>' 'word8' 8
+--                    '<*>' 'byteString' 16
+--                    '<*>' 'byteString' 16
+-- @
 block :: Block a -> BitGet a
 block (Block i p) = do
   ensureBits i
@@ -221,7 +246,7 @@ readWord64be n s@(S bs o)
   | otherwise = error "readWord64be: tried to read more than 64 bits"
 
 ------------------------------------------------------------------------
--- unrolled codensity/state monad
+
 newtype BitGet a = B { runState :: S -> Get (S,a) }
 
 instance Monad BitGet where
