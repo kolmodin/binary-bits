@@ -15,6 +15,7 @@ module Data.Binary.Bits.Get
             , word16be
             , word32be
             , word64be
+            , byteString
 
             , block
 
