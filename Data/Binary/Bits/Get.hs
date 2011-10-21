@@ -2,6 +2,7 @@
 
 module Data.Binary.Bits.Get
             ( BitGet
+            , Block
             , runBitGet
 
             , getBool
