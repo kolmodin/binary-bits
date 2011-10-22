@@ -1,23 +1,21 @@
--- http://www.haskell.org/cabal/release/cabal-latest/doc/users-guide/authors.html#pkg-descr.
+-- http://www.haskell.org/cabal/release/cabal-latest/doc/users-guide/
 name:                binary-bits
 version:             0.1
-synopsis:            Bit parsing on top of binary.
-description:         Bit parsing on top of binary. Provides functions to
-                     read bits as 8/16/32/64 words.
+synopsis:            Bit parsing/writing on top of binary.
+description:         Bit parsing/writing on top of binary. Provides functions to
+                     read and write bits to and from 8\/16\/32\/64 words.
 license:             BSD3
 license-file:        LICENSE
-author:              Lennart Kolmodin <kolmodin@gentoo.org>
-maintainer:          Lennart Kolmodin <kolmodin@gentoo.org>
--- copyright:
-category:            Data
+author:              Lennart Kolmodin <kolmodin@gmail.com>
+maintainer:          Lennart Kolmodin <kolmodin@gmail.com>
+category:            Data, Parsing
 build-type:          Simple
--- Extra files to be distributed with the package, such as examples or
--- a README.
--- extra-source-files:
 
--- Constraint on the version of Cabal needed to build this package.
 cabal-version:       >=1.10
 
+source-repository head
+  type: darcs
+  location: http://code.haskell.org/binary-bits
 
 library
   build-depends: base==4.*, binary, bytestring
@@ -30,19 +28,17 @@ library
 
   default-language:    Haskell98
 
-  -- other-modules:
-  -- build-tools:
+  ghc-options: -O2 -Wall
 
 test-suite qc
   type: exitcode-stdio-1.0
   main-is: BitsQC.hs
   default-language:    Haskell98
 
-  build-depends: binary-bits, binary,
-                 base==4.*, haskell98, bytestring,
+  build-depends: base==4.*, binary, bytestring,
                  QuickCheck>=2, random,
                  test-framework,
                  test-framework-quickcheck2
-  ghc-options: -fhpc
 
-  default-extensions: FlexibleInstances, FlexibleContexts, TupleSections
+  other-extensions: RankNTypes, MagicHash, BangPatterns, CPP,
+                    FlexibleInstances, FlexibleContexts, TupleSections
