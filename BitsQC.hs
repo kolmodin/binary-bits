@@ -96,13 +96,6 @@ tests =
       ]
   ]
 
-{-
-  -- these tests use the R structure
-  --
-  -- quickCheck prop_Word32_from_2_Word16
-  -- quickCheck prop_Word32_from_Word8_and_Word16
--}
- 
 prop_putget_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => W a -> Property
 prop_putget_with_bitreq (W w) = property $
   -- write all words with as many bits as it's required
@@ -167,7 +160,7 @@ prop_bitget_bytestring_interspersed (W ws) bss = property $
       r = runGet (runBitGet g) lbs
   in map (ws,) bss == r
 
--- number of bits required to write @v@
+-- | number of bits required to write @v@
 bitreq :: (Num b, Bits a, Ord a) => a -> b
 bitreq v = fromIntegral . head $ [ req | (req, top) <- bittable, v <= top ]
 
@@ -193,7 +186,6 @@ prop_composite_case b (W w) = w < 0x8000 ==>
       lbs = runPut (runBitPut p)
       w' = runGet (runBitGet g) lbs
   in w == w'
-
 
 prop_compare_put_with_naive :: (Bits a, BinaryBit a, Ord a) => W [a] -> Property
 prop_compare_put_with_naive (W ws) = property $
@@ -229,27 +221,6 @@ naive_get n0 =
           False -> loop (n-1) (acc `shiftL` 1)
           True  -> loop (n-1) ((acc `shiftL` 1) + 1)
   in loop n0 0
-
-{-
-prop_Word32_from_Word8_and_Word16 :: Word8 -> Word16 -> Property
-prop_Word32_from_Word8_and_Word16 w8 w16 = property $
-  let p = RWord32be 24
-      w' = runGet (get p) lbs
-  in w0 == w'
-  where
-    lbs = runPut (putWord8 w8 >> putWord16be w16)
-    w0 = ((fromIntegral w8) `shiftL` 16) .|. fromIntegral w16
-
-prop_Word32_from_2_Word16 :: Word16 -> Word16 -> Property
-prop_Word32_from_2_Word16 w1 w2 = property $
-  let p = RWord32be 32
-      w' = runGet (get p) lbs
-  in w0 == w'
-  where
-    lbs = encode w0
-    w0 = ((fromIntegral w1) `shiftL` 16) .|. fromIntegral w2
--}
-
 
 shrinker :: (Num a, Ord a, Bits a) => a -> [a]
 shrinker 0 = []
