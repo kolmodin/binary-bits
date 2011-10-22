@@ -1,39 +1,93 @@
 {-# LANGUAGE RankNTypes, MagicHash, BangPatterns, CPP #-}
 
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Data.Binary.Bits.Get
+-- Copyright   :  (c) Lennart Kolmodin 2010-2011
+-- License     :  BSD3-style (see LICENSE)
+--
+-- Maintainer  :  kolmodin@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable (should run where the package binary runs)
+--
+-- Parse bits easily. Parsing can be done either in a monadic style, or more
+-- efficiently, using the 'Applicative' style.
+--
+-- For the monadic style, write your parser as a 'BitGet' monad using the
+--
+--   * 'getBool'
+--
+--   * 'getWord8'
+--
+--   * 'getWord16be'
+--
+--   * 'getWord32be'
+--
+--   * 'getWord64be'
+--
+--   * 'getByteString'
+--
+-- functions and run it with 'runBitGet'.
+-- 
+-- For the applicative style, compose the fuctions
+--
+--   * 'bool'
+--
+--   * 'word8'
+--
+--   * 'word16be'
+--
+--   * 'word32be'
+--
+--   * 'word64be'
+--
+--   * 'byteString'
+--
+-- to make a 'Block'.
+-- Use 'block' to turn it into the 'BitGet' monad to be able to run it with
+-- 'runBitGet'.
+-----------------------------------------------------------------------------
+
 module Data.Binary.Bits.Get
-            ( BitGet
-            , Block
+            (
+            -- * BitGet monad
+
+            -- $bitget
+
+              BitGet
             , runBitGet
 
+            -- ** Get bytes
             , getBool
             , getWord8
             , getWord16be
             , getWord32be
             , getWord64be
 
+            -- * Blocks
+
+            -- $blocks
+            , Block
+            , block
+
+            -- ** Read in Blocks
             , bool
             , word8
             , word16be
             , word32be
             , word64be
             , byteString
-
-            , block
-
             , Data.Binary.Bits.Get.getByteString
+
             ) where
 
 import Data.Binary.Get as B ( runGet, Get, getByteString )
 
 import Data.ByteString as B
-import Data.ByteString.Internal
 import Data.ByteString.Unsafe
-
-import qualified Data.ByteString.Lazy as L
 
 import Data.Bits
 import Data.Word
-import Data.List as List ( reverse )
 
 import Control.Applicative
 
@@ -42,8 +96,54 @@ import Prelude as P
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
 import GHC.Base
 import GHC.Word
-import GHC.Int
 #endif
+
+
+-- $bitget
+-- Parse bits using a monad.
+--
+-- @
+--myBitParser :: 'Get' ('Word8', 'Word8')
+--myBitParser = 'runGetBit' parse4by4
+--
+--parse4by4 :: 'BitGet' ('Word8', 'Word8')
+--parse4by4 = do
+--   bits <- 'getWord8' 4
+--   more <- 'getWord8' 4
+--   return (bits,more)
+-- @
+
+-- $blocks
+-- Parse more efficiently in blocks. Each block is read with only one boundry
+-- check (checking that there is enough input) as the size of the block can be
+-- calculated statically. This is somewhat limiting as you cannot make the
+-- parsing depend on the input being parsed.
+-- 
+-- @
+--data IPV6Header = IPV6Header {
+--     ipv6Version :: 'Word8'
+--   , ipv6TrafficClass :: 'Word8'
+--   , ipv6FlowLabel :: 'Word32
+--   , ipv6PayloadLength :: 'Word16'
+--   , ipv6NextHeader :: 'Word8'
+--   , ipv6HopLimit :: 'Word8'
+--   , ipv6SourceAddress :: 'ByteString'
+--   , ipv6DestinationAddress :: 'ByteString'
+-- }
+--
+-- ipv6headerblock =
+--         IPV6Header '<$>' 'word8' 4
+--                    '<*>' 'word8' 8
+--                    '<*>' 'word32be' 24
+--                    '<*>' 'word16be' 16
+--                    '<*>' 'word8' 8
+--                    '<*>' 'word8' 8
+--                    '<*>' 'byteString' 16
+--                    '<*>' 'byteString' 16
+--
+--ipv6Header :: 'Get' IPV6Header
+--ipv6Header = 'runBitGet' ('block' ipv6headerblock)
+-- @
 
 data S = S !ByteString -- Input
            !Int -- Bit offset (0-7)
@@ -62,35 +162,22 @@ instance Applicative Block where
   (Block i _)  *> (Block j q) = Block (i+j) (q . incS i)
   (Block i p) <*  (Block j _) = Block (i+j) p
 
--- | Get a block. Guaranteed to be done with one single boundry check, and must
--- therefore require a statically known number of bits.
--- Build blocks using 'bool', 'word8', 'word16be', 'word32be', 'word64be' and 'Applicative'.
---
--- @
--- data IPV6Header = IPV6Header {
---     ipv6Version :: 'Word8'
---   , ipv6TrafficClass :: 'Word8'
---   , ipv6FlowLabel :: 'Word32
---   , ipv6PayloadLength :: 'Word16'
---   , ipv6NextHeader :: 'Word8'
---   , ipv6HopLimit :: 'Word8'
---   , ipv6SourceAddress :: 'ByteString'
---   , ipv6DestinationAddress :: 'ByteString'
--- }
---
--- parse = IPV6Header '<$>' 'word8' 4
---                    '<*>' 'word8' 8
---                    '<*>' 'word32be' 24
---                    '<*>' 'word16be' 16
---                    '<*>' 'word8' 8
---                    '<*>' 'word8' 8
---                    '<*>' 'byteString' 16
---                    '<*>' 'byteString' 16
--- @
+-- | Get a block. Will be read with one single boundry check, and
+-- therefore requires a statically known number of bits.
+-- Build blocks using 'bool', 'word8', 'word16be', 'word32be', 'word64be',
+-- 'byteString' and 'Applicative'.
 block :: Block a -> BitGet a
 block (Block i p) = do
   ensureBits i
   modifyState (\s -> (incS i s, p s))
+
+
+incS :: Int -> S -> S
+incS o (S bs n) =
+  let !o' = (n+o)
+      !d = o' `shiftR` 3
+      !n' = o' .&. make_mask 3
+  in S (unsafeDrop d bs) n'
 
 -- | make_mask 3 = 00000111
 make_mask :: Bits a => Int -> a
@@ -102,25 +189,17 @@ make_mask n = (1 `shiftL` fromIntegral n) - 1
 {-# SPECIALIZE make_mask :: Int -> Word32 #-}
 {-# SPECIALIZE make_mask :: Int -> Word64 #-}
 
+bit_offset :: Int -> Int
+bit_offset n = make_mask 3 .&. n
+
+byte_offset :: Int -> Int
+byte_offset n = n `shiftR` 3
+
 readBool :: S -> Bool
 readBool (S bs n) = testBit (unsafeHead bs) (7-n)
 
-incS :: Int -> S -> S
-incS o (S bs n) =
-  let !o' = (n+o)
-      !d = o' `shiftR` 3
-      !n' = o' .&. make_mask 3
-  in S (unsafeDrop d bs) n'
-
-readByteString :: Int -> S -> ByteString
-readByteString n s@(S bs o)
-  -- no offset, easy.
-  | o == 0 = unsafeTake n bs
-  -- offset. ugg. this is really naive and slow. but also pretty easy :)
-  | otherwise = B.pack (P.map (readWord8 8) (P.take n (iterate (incS 8) s)))
-
 readWord8 :: Int -> S -> Word8
-readWord8 n s@(S bs o)
+readWord8 n (S bs o)
   -- no bits at all, return 0
   | n == 0 = 0
 
@@ -139,11 +218,6 @@ readWord8 n s@(S bs o)
                  w' = (w `shiftr_w16` (16 - o - n)) .&. m
              in fromIntegral w'
 
-bit_offset :: Int -> Int
-bit_offset n = make_mask 3 .&. n
-
-byte_offset :: Int -> Int
-byte_offset n = n `shiftR` 3
 
 readWord16be :: Int -> S -> Word16
 readWord16be n s@(S bs o)
@@ -170,9 +244,46 @@ readWord16be n s@(S bs o)
 
   | otherwise = error "readWord16be: tried to read more than 16 bits"
 
+readWord32be :: Int -> S -> Word32
+readWord32be n s@(S _ o)
+  -- 8 or fewer bits, use readWord8
+  | n <= 8 = fromIntegral (readWord8 n s)
+
+  -- 16 or fewer bits, use readWord16be
+  | n <= 16 = fromIntegral (readWord16be n s)
+
+  | o == 0 = readWithoutOffset s shiftl_w32 shiftr_w32 n
+
+  | n <= 32 = readWithOffset s shiftl_w32 shiftr_w32 n
+
+  | otherwise = error "readWord32be: tried to read more than 32 bits"
+
+
+readWord64be :: Int -> S -> Word64
+readWord64be n s@(S _ o)
+  -- 8 or fewer bits, use readWord8
+  | n <= 8 = fromIntegral (readWord8 n s)
+
+  -- 16 or fewer bits, use readWord16be
+  | n <= 16 = fromIntegral (readWord16be n s)
+
+  | o == 0 = readWithoutOffset s shiftl_w64 shiftr_w64 n
+
+  | n <= 64 = readWithOffset s shiftl_w64 shiftr_w64 n
+
+  | otherwise = error "readWord64be: tried to read more than 64 bits"
+
+
+readByteString :: Int -> S -> ByteString
+readByteString n s@(S bs o)
+  -- no offset, easy.
+  | o == 0 = unsafeTake n bs
+  -- offset. ugg. this is really naive and slow. but also pretty easy :)
+  | otherwise = B.pack (P.map (readWord8 8) (P.take n (iterate (incS 8) s)))
+
 readWithoutOffset :: (Bits a, Num a)
                   => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> a
-readWithoutOffset s@(S bs o) shifterL shifterR n
+readWithoutOffset (S bs o) shifterL shifterR n
   | o /= 0 = error "readWithoutOffset: there is an offset"
 
   | bit_offset n == 0 && byte_offset n <= 4 = 
@@ -196,8 +307,8 @@ readWithoutOffset s@(S bs o) shifterL shifterR n
               in w
 
 readWithOffset :: (Bits a, Num a)
-	       => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> a
-readWithOffset s@(S bs o) shifterL shifterR n
+         => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> a
+readWithOffset (S bs o) shifterL shifterR n
   | n <= 64 = let bits_in_msb = 8 - o
                   (n',top) = (n - bits_in_msb
                              , (fromIntegral (unsafeHead bs) .&. make_mask bits_in_msb) `shifterL` n')
@@ -217,38 +328,9 @@ readWithOffset s@(S bs o) shifterL shifterR n
                   w = top .|. mseg .|. last
               in w
 
-
-readWord32be :: Int -> S -> Word32
-readWord32be n s@(S bs o)
-  -- 8 or fewer bits, use readWord8
-  | n <= 8 = fromIntegral (readWord8 n s)
-
-  -- 16 or fewer bits, use readWord16be
-  | n <= 16 = fromIntegral (readWord16be n s)
-
-  | o == 0 = readWithoutOffset s shiftl_w32 shiftr_w32 n
-
-  | n <= 32 = readWithOffset s shiftl_w32 shiftr_w32 n
-
-  | otherwise = error "readWord32be: tried to read more than 32 bits"
-
-
-readWord64be :: Int -> S -> Word64
-readWord64be n s@(S bs o)
-  -- 8 or fewer bits, use readWord8
-  | n <= 8 = fromIntegral (readWord8 n s)
-
-  -- 16 or fewer bits, use readWord16be
-  | n <= 16 = fromIntegral (readWord16be n s)
-
-  | o == 0 = readWithoutOffset s shiftl_w64 shiftr_w64 n
-
-  | n <= 64 = readWithOffset s shiftl_w64 shiftr_w64 n
-
-  | otherwise = error "readWord64be: tried to read more than 64 bits"
-
 ------------------------------------------------------------------------
-
+-- | 'BitGet' is a monad, applicative and a functor. See 'runBitGet'
+-- for how to run it.
 newtype BitGet a = B { runState :: S -> Get (S,a) }
 
 instance Monad BitGet where
@@ -264,6 +346,8 @@ instance Applicative BitGet where
   pure x = return x
   fm <*> m = fm >>= \f -> m >>= \v -> return (f v)
 
+-- | Run a 'BitGet' within the Binary packages 'Get' monad. If a byte has
+-- been partially consumed it will be discarded once 'runBitGet' is finished.
 runBitGet :: BitGet a -> Get a
 runBitGet bg = do
   (_,a) <- runState bg (S B.empty 0)
@@ -281,47 +365,59 @@ modifyState f = B $ \s -> return (f s)
 -- | Make sure there are at least @n@ bits.
 ensureBits :: Int -> BitGet ()
 ensureBits n = do
-  s@(S bs o) <- getState
+  (S bs o) <- getState
   if n <= (B.length bs * 8 - o)
     then return ()
     else do let currentBits = B.length bs * 8 - o
             let byteCount = (n - currentBits + 7) `div` 8
-            B $ \s -> do bs' <- B.getByteString byteCount
+            B $ \_ -> do bs' <- B.getByteString byteCount
                          return (S (bs`append`bs') o, ())
 
+-- | Get 1 bit as a 'Bool'.
 getBool :: BitGet Bool
 getBool = block bool
 
+-- | Get @n@ bits as a 'Word8'. @n@ must be within @[0..8]@.
 getWord8 :: Int -> BitGet Word8
 getWord8 n = block (word8 n)
 
+-- | Get @n@ bits as a 'Word16'. @n@ must be within @[0..16]@.
 getWord16be :: Int -> BitGet Word16
 getWord16be n = block (word16be n)
 
+-- | Get @n@ bits as a 'Word32'. @n@ must be within @[0..32]@.
 getWord32be :: Int -> BitGet Word32
 getWord32be n = block (word32be n)
 
+-- | Get @n@ bits as a 'Word64'. @n@ must be within @[0..64]@.
 getWord64be :: Int -> BitGet Word64
 getWord64be n = block (word64be n)
 
+-- | Get @n@ bytes as a 'ByteString'.
 getByteString :: Int -> BitGet ByteString
 getByteString n = block (byteString n)
 
+-- | Read a 1 bit 'Bool'.
 bool :: Block Bool
 bool = Block 1 readBool
 
+-- | Read @n@ bits as a 'Word8'. @n@ must be within @[0..8]@.
 word8 :: Int -> Block Word8
 word8 n = Block n (readWord8 n)
 
+-- | Read @n@ bits as a 'Word16'. @n@ must be within @[0..16]@.
 word16be :: Int -> Block Word16
 word16be n = Block n (readWord16be n)
 
+-- | Read @n@ bits as a 'Word32'. @n@ must be within @[0..32]@.
 word32be :: Int -> Block Word32
 word32be n = Block n (readWord32be n)
 
+-- | Read @n@ bits as a 'Word64'. @n@ must be within @[0..64]@.
 word64be :: Int -> Block Word64
 word64be n = Block n (readWord64be n)
 
+-- | Read @n@ bytes as a 'ByteString'.
 byteString :: Int -> Block ByteString
 byteString n = Block (n*8) (readByteString n)
 

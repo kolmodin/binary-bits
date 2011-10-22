@@ -1,13 +1,32 @@
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Data.Binary.Bits.Put
+-- Copyright   :  (c) Lennart Kolmodin 2010-2011
+-- License     :  BSD3-style (see LICENSE)
+--
+-- Maintainer  :  kolmodin@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable (should run where the package binary runs)
+--
+-- Put bits easily.
+-----------------------------------------------------------------------------
+
 module Data.Binary.Bits.Put
           ( BitPut
           , runBitPut
           , joinPut
 
+          -- * Data types
+          -- ** Bool
           , putBool
+
+          -- ** Words
           , putWord8
           , putWord16be
           , putWord32be
           , putWord64be
+
+          -- ** ByteString
           , putByteString
           )
           where
@@ -29,12 +48,11 @@ data PairS a = PairS a {-# UNPACK #-} !S
 
 data S = S !Builder !Word8 !Int
 
-instance Show S where
-  show (S _ w o) = "S( " ++ show w ++ " : " ++ show o ++ ")"
-
+-- | Put a 1 bit 'Bool'.
 putBool :: Bool -> BitPut ()
 putBool b = putWord8 1 (if b then 1 else 0)
 
+-- | Put the @n@ lower bits of a 'Word8'.
 putWord8 :: Int -> Word8 -> BitPut ()
 putWord8 n w = BitPut $ \s -> PairS () $
   case s of
@@ -49,6 +67,7 @@ putWord8 n w = BitPut $ \s -> PairS () $
                                   t' = w `shiftL` (8 - o')
                               in S (b `mappend` B.singleton w') t' o'
 
+-- | Put the @n@ lower bits of a 'Word16'.
 putWord16be :: Int -> Word16 -> BitPut ()
 putWord16be n w
   | n <= 8 = putWord8 n (fromIntegral w)
@@ -71,6 +90,7 @@ putWord16be n w
                             t'  = fromIntegral (w `shiftL` (8-o'))
                         in (S (b `mappend` B.singleton w' `mappend` B.singleton w'') t' o')
 
+-- | Put the @n@ lower bits of a 'Word32'.
 putWord32be :: Int -> Word32 -> BitPut ()
 putWord32be n w
   | n <= 16 = putWord16be n (fromIntegral w)
@@ -78,6 +98,7 @@ putWord32be n w
       putWord32be (n-16) (w`shiftR`16)
       putWord32be    16  (w .&. 0x0000ffff)
 
+-- | Put the @n@ lower bits of a 'Word64'.
 putWord64be :: Int -> Word64 -> BitPut ()
 putWord64be n w
   | n <= 32 = putWord32be n (fromIntegral w)
@@ -85,6 +106,7 @@ putWord64be n w
       putWord64be (n-32) (w`shiftR`32)
       putWord64be    32  (w .&. 0xffffffff)
 
+-- | Put a 'ByteString'.
 putByteString :: ByteString -> BitPut ()
 putByteString bs = do
   offset <- hasOffset
@@ -94,6 +116,8 @@ putByteString bs = do
   where
     hasOffset = BitPut $ \ s@(S _ _ o) -> PairS (o /= 0) s
 
+-- | Run a 'Put' inside 'BitPut'. Any partially written bytes will be flushed
+-- before 'Put' executes to ensure byte alignment.
 joinPut :: Put -> BitPut ()
 joinPut m = BitPut $ \s0 -> PairS () $
   let (S b0 _ _) = flushIncomplete s0
@@ -111,11 +135,12 @@ flushIncomplete s@(S b w o)
   | o == 0 = s
   | otherwise = (S (b `mappend` B.singleton w) 0 0)
 
+-- | Run the 'BitPut' monad inside 'Put'.
 runBitPut :: BitPut () -> Put.Put
-runBitPut m = Put.putBuilder b'
+runBitPut m = Put.putBuilder b
   where
-  PairS _ s@(S b t o) = run m (S mempty 0 0)
-  (S b' _ _) = flushIncomplete s
+  PairS _ s = run m (S mempty 0 0)
+  (S b _ _) = flushIncomplete s
 
 instance Monad BitPut where
   m >>= k = BitPut $ \s ->
