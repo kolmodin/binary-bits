@@ -82,6 +82,13 @@ tests =
       , testProperty "Word64" (prop_putget_list_simple :: W [Word64] -> Property)
       ]
 
+  , testGroup "prop_putget_applicative_with_bitreq"
+      [ testProperty "Word8" (prop_putget_applicative_with_bitreq :: W [(Word8,Word8,Word8)]  -> Property)
+      , testProperty "Word16" (prop_putget_applicative_with_bitreq :: W [(Word16,Word16,Word16)] -> Property)
+      , testProperty "Word32" (prop_putget_applicative_with_bitreq :: W [(Word32,Word32,Word32)] -> Property)
+      , testProperty "Word64" (prop_putget_applicative_with_bitreq :: W [(Word64,Word64,Word64)] -> Property)
+      ]
+
   , testGroup "prop_putget_list_with_bitreq"
       [ testProperty "Word8"  (prop_putget_list_with_bitreq :: W [Word8]  -> Property)
       , testProperty "Word16" (prop_putget_list_with_bitreq :: W [Word16] -> Property)
@@ -128,6 +135,18 @@ prop_putget_list_with_bitreq (W ws) = property $
   in ws == ws'
   where
     bitlist = map bitreq ws
+
+prop_putget_applicative_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => W [(a,a,a)] -> Property
+prop_putget_applicative_with_bitreq (W ts) = property $
+  let p = mapM_ (\(a,b,c) -> do putBits (bitreq a) a
+                                putBits (bitreq b) b
+                                putBits (bitreq c) c) ts
+      g = mapM (\(a,b,c) -> (,,) <$> getBits a <*> getBits b <*> getBits c) bitlist
+      lbs = runPut (runBitPut p)
+      ts' = runGet (runBitGet g) lbs
+  in ts == ts'
+  where
+    bitlist = map (\(a,b,c) -> (bitreq a, bitreq b, bitreq c)) ts
 
 -- | Write bits using this library, and read them back using the binary
 -- library.
@@ -235,13 +254,15 @@ shrinker w = [ w `shiftR` 1 -- try to make everything roughly half size
 
 data W a = W { unW :: a } deriving (Show, Eq, Ord)
 
+arbitraryW :: (Arbitrary (W a)) => Gen a
+arbitraryW = unW <$> arbitrary
+
+shrinkW :: (Arbitrary (W a)) => a -> [a]
+shrinkW x = unW <$> shrink (W x)
+
 instance Arbitrary (W Bool) where
     arbitrary       = W <$> arbitrary
     shrink          = map W <$> shrink . unW
-
-instance (Arbitrary (W a)) => Arbitrary (W [a]) where
-    arbitrary       = W . map unW <$> arbitrary
-    shrink          = map (W . map unW) <$> mapM shrink . map W . unW
 
 instance Arbitrary (W Word8) where
     arbitrary       = W <$> choose (minBound, maxBound)
@@ -262,6 +283,18 @@ instance Arbitrary (W Word64) where
 instance Arbitrary B.ByteString where
     arbitrary       = B.pack <$> arbitrary
     shrink bs       = B.pack <$> shrink (B.unpack bs)
+
+instance (Arbitrary (W a)) => Arbitrary (W [a]) where
+    arbitrary       = W . map unW <$> arbitrary
+    shrink          = map (W . map unW) <$> mapM shrink . map W . unW
+
+instance (Arbitrary (W a), Arbitrary (W b)) => Arbitrary (W (a,b)) where
+    arbitrary        = (W .) . (,) <$> arbitraryW <*> arbitraryW
+    shrink (W (a,b)) = (W .) . (,) <$> shrinkW a <*> shrinkW b
+
+instance (Arbitrary (W a), Arbitrary (W b), Arbitrary (W c)) => Arbitrary (W (a,b,c)) where
+    arbitrary          = ((W .) .) . (,,) <$> arbitraryW <*> arbitraryW <*> arbitraryW
+    shrink (W (a,b,c)) = ((W .) .) . (,,) <$> shrinkW a <*> shrinkW b <*> shrinkW c
 
 integralRandomR :: (Integral a, RandomGen g) => (a,a) -> g -> (a,g)
 integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
