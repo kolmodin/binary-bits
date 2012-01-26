@@ -14,8 +14,8 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 source-repository head
-  type: darcs
-  location: http://code.haskell.org/binary-bits
+  type: git
+  location: git://github.com/kolmodin/binary-bits.git
 
 library
   build-depends: base==4.*, binary, bytestring
