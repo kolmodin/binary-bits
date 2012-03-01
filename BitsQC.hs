@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, TupleSections #-}
+{-# LANGUAGE CPP, FlexibleInstances, FlexibleContexts, TupleSections #-}
 
 module Main where
 
@@ -311,6 +311,7 @@ integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
                                          fromIntegral b :: Integer) g of
                             (x,g) -> (fromIntegral x, g)
 
+{-
 instance Random Word where
   randomR = integralRandomR
   random = randomR (minBound,maxBound)
@@ -330,3 +331,4 @@ instance Random Word32 where
 instance Random Word64 where
   randomR = integralRandomR
   random = randomR (minBound,maxBound)
+-}
