@@ -419,7 +419,8 @@ word64be n = Block n (readWord64be n)
 
 -- | Read @n@ bytes as a 'ByteString'.
 byteString :: Int -> Block ByteString
-byteString n = Block (n*8) (readByteString n)
+byteString n | n > 0 = Block (n*8) (readByteString n)
+             | otherwise = Block 0 (\_ -> B.empty)
 
 ------------------------------------------------------------------------
 -- Unchecked shifts, from the package binary
