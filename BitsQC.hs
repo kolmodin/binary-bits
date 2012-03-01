@@ -14,6 +14,7 @@ import Data.Binary.Bits.Get
 import Data.Binary.Bits.Put
 
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
 
 import Control.Applicative
 import Data.Bits
@@ -38,6 +39,9 @@ tests =
 
   , testGroup "Custom test cases"
       [ testProperty "prop_composite_case" prop_composite_case ]
+
+  , testGroup "getByteString"
+      [ testProperty "prop_getByteString_negative" prop_getByteString_negative ]
 
   , testGroup "prop_bitput_with_get_from_binary"
       [ testProperty "Word8"  (prop_bitput_with_get_from_binary :: W [Word8]  -> Property)
@@ -102,6 +106,12 @@ tests =
       , testProperty "Word64" (prop_bitget_bytestring_interspersed :: W Word64 -> [B.ByteString] -> Property)
       ]
   ]
+
+
+prop_getByteString_negative :: Int -> Property
+prop_getByteString_negative n =
+  n < 1 ==>
+    runGet (runBitGet (getByteString n)) L.empty == B.empty
 
 prop_putget_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => W a -> Property
 prop_putget_with_bitreq (W w) = property $
