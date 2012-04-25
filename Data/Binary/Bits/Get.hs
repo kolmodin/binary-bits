@@ -146,13 +146,13 @@ import GHC.Word
 --ipv6Header = 'runBitGet' ('block' ipv6headerblock)
 -- @
 
-data S = S !ByteString -- Input
-           !Int -- Bit offset (0-7)
+data S = S {-# UNPACK #-} !ByteString -- Input
+           {-# UNPACK #-} !Int -- Bit offset (0-7)
           deriving (Show)
 
 -- | A block that will be read with only one boundry check. Needs to know the
 -- number of bits in advance.
-data Block a = Block !Int (S -> a)
+data Block a = Block Int (S -> a)
 
 instance Functor Block where
   fmap f (Block i p) = Block i (\s -> f (p s))
@@ -170,8 +170,9 @@ instance Applicative Block where
 block :: Block a -> BitGet a
 block (Block i p) = do
   ensureBits i
-  modifyState (\s -> (incS i s, p s))
-
+  s <- getState
+  putState $! (incS i s)
+  return $! p s
 
 incS :: Int -> S -> S
 incS o (S bs n) =
@@ -372,9 +373,6 @@ getState = B $ \s -> return (s,s)
 
 putState :: S -> BitGet ()
 putState s = B $ \_ -> return (s,())
-
-modifyState :: (S -> (S,a)) -> BitGet a
-modifyState f = B $ \s -> return (f s)
 
 -- | Make sure there are at least @n@ bits.
 ensureBits :: Int -> BitGet ()
