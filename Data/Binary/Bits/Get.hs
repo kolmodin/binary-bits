@@ -82,6 +82,7 @@ module Data.Binary.Bits.Get
             ) where
 
 import Data.Binary.Get as B ( runGet, Get, getByteString )
+import Data.Binary.Get.Internal as B ( get, put, ensureN )
 
 import Data.ByteString as B
 import Data.ByteString.Unsafe
@@ -335,7 +336,7 @@ newtype BitGet a = B { runState :: S -> Get (S,a) }
 
 instance Monad BitGet where
   return x = B $ \s -> return (s,x)
-  fail str = B $ \_s -> fail str
+  fail str = B $ \(S inp n) -> putBackState inp n >> fail str
   (B f) >>= g = B $ \s -> do (s',a) <- f s
                              runState (g a) s'
 
@@ -350,8 +351,21 @@ instance Applicative BitGet where
 -- been partially consumed it will be discarded once 'runBitGet' is finished.
 runBitGet :: BitGet a -> Get a
 runBitGet bg = do
-  (_,a) <- runState bg (S B.empty 0)
+  s <- mkInitState
+  ((S str' n),a) <- runState bg s
+  putBackState str' n
   return a
+
+mkInitState :: Get S
+mkInitState = do
+  str <- get
+  put B.empty
+  return (S str 0)
+
+putBackState :: B.ByteString -> Int -> Get ()
+putBackState bs n = do
+ remaining <- get
+ put (B.drop (if n==0 then 0 else 1) bs `B.append` remaining)
 
 getState :: BitGet S
 getState = B $ \s -> return (s,s)
@@ -370,7 +384,9 @@ ensureBits n = do
     then return ()
     else do let currentBits = B.length bs * 8 - o
             let byteCount = (n - currentBits + 7) `div` 8
-            B $ \_ -> do bs' <- B.getByteString byteCount
+            B $ \_ -> do B.ensureN byteCount
+                         bs' <- B.get
+                         put B.empty
                          return (S (bs`append`bs') o, ())
 
 -- | Get 1 bit as a 'Bool'.

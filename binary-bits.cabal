@@ -18,7 +18,7 @@ source-repository head
   location: git://github.com/kolmodin/binary-bits.git
 
 library
-  build-depends: base==4.*, binary, bytestring
+  build-depends: base==4.*, binary >= 0.6.0.0, bytestring
 
   other-extensions: RankNTypes, MagicHash, BangPatterns, CPP
 
@@ -35,7 +35,7 @@ test-suite qc
   main-is: BitsQC.hs
   default-language:    Haskell98
 
-  build-depends: base==4.*, binary, bytestring,
+  build-depends: base==4.*, binary >= 0.6.0.0, bytestring,
                  QuickCheck>=2, random,
                  test-framework,
                  test-framework-quickcheck2
