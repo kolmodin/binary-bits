@@ -3,7 +3,7 @@
 module Main where
 
 import Data.Binary ( encode, Binary(..) )
-import Data.Binary.Get ( runGet )
+import Data.Binary.Get ( runGet, runGetPartial, feedLBS, Result(..) )
 import Data.Binary.Put ( runPut )
 
 import qualified Data.Binary.Get as BG ( getWord8, getWord16be, getWord32be, getWord64be )
@@ -42,6 +42,9 @@ tests =
 
   , testGroup "getByteString"
       [ testProperty "prop_getByteString_negative" prop_getByteString_negative ]
+
+  , testGroup "Fail"
+      [ testProperty "monadic fail" prop_fail ]
 
   , testGroup "prop_bitput_with_get_from_binary"
       [ testProperty "Word8"  (prop_bitput_with_get_from_binary :: W [Word8]  -> Property)
@@ -189,6 +192,25 @@ prop_bitget_bytestring_interspersed (W ws) bss = property $
       r = runGet (runBitGet g) lbs
   in map (ws,) bss == r
 
+-- | Test failing.
+prop_fail :: L.ByteString -> String -> Property
+prop_fail lbs errMsg0 = forAll (choose (0, 8 * L.length lbs)) $ \len ->
+  let (bytes,bits) = len `divMod` 8
+      expectedBytesConsumed
+        | bits == 0 = bytes
+        | otherwise = bytes + 1
+      p = do getByteString (fromIntegral bytes)
+             getBits (fromIntegral bits) :: BitGet Word8
+             fail errMsg0
+      r = runGetPartial (runBitGet p) `feedLBS` lbs
+  in case r of
+       Fail remainingBS pos errMsg ->
+         and [ L.fromChunks [remainingBS] == L.drop expectedBytesConsumed lbs
+             , pos == expectedBytesConsumed
+             , errMsg == errMsg0
+             ]
+       _ -> False
+
 -- | number of bits required to write @v@
 bitreq :: (Num b, Bits a, Ord a) => a -> b
 bitreq v = fromIntegral . head $ [ req | (req, top) <- bittable, v <= top ]
@@ -293,6 +315,10 @@ instance Arbitrary (W Word64) where
 instance Arbitrary B.ByteString where
     arbitrary       = B.pack <$> arbitrary
     shrink bs       = B.pack <$> shrink (B.unpack bs)
+
+instance Arbitrary L.ByteString where
+    arbitrary       = L.fromChunks <$> arbitrary
+    shrink bs       = L.fromChunks <$> shrink (L.toChunks bs)
 
 instance (Arbitrary (W a)) => Arbitrary (W [a]) where
     arbitrary       = W . map unW <$> arbitrary
