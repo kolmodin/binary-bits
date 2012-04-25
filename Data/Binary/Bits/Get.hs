@@ -200,6 +200,7 @@ byte_offset n = n `shiftR` 3
 readBool :: S -> Bool
 readBool (S bs n) = testBit (unsafeHead bs) (7-n)
 
+{-# INLINE readWord8 #-}
 readWord8 :: Int -> S -> Word8
 readWord8 n (S bs o)
   -- no bits at all, return 0
@@ -220,7 +221,7 @@ readWord8 n (S bs o)
                  w' = (w `shiftr_w16` (16 - o - n)) .&. m
              in fromIntegral w'
 
-
+{-# INLINE readWord16be #-}
 readWord16be :: Int -> S -> Word16
 readWord16be n s@(S bs o)
 
@@ -246,6 +247,7 @@ readWord16be n s@(S bs o)
 
   | otherwise = error "readWord16be: tried to read more than 16 bits"
 
+{-# INLINE readWord32be #-}
 readWord32be :: Int -> S -> Word32
 readWord32be n s@(S _ o)
   -- 8 or fewer bits, use readWord8
@@ -261,6 +263,7 @@ readWord32be n s@(S _ o)
   | otherwise = error "readWord32be: tried to read more than 32 bits"
 
 
+{-# INLINE readWord64be #-}
 readWord64be :: Int -> S -> Word64
 readWord64be n s@(S _ o)
   -- 8 or fewer bits, use readWord8
