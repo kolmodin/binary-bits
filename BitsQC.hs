@@ -3,7 +3,7 @@
 module Main where
 
 import Data.Binary ( encode, Binary(..) )
-import Data.Binary.Get ( runGet, runGetPartial, feedLBS, Result(..) )
+import Data.Binary.Get ( runGet, runGetIncremental, pushChunks, Decoder(..) )
 import Data.Binary.Put ( runPut )
 
 import qualified Data.Binary.Get as BG ( getWord8, getWord16be, getWord32be, getWord64be )
@@ -202,7 +202,7 @@ prop_fail lbs errMsg0 = forAll (choose (0, 8 * L.length lbs)) $ \len ->
       p = do getByteString (fromIntegral bytes)
              getBits (fromIntegral bits) :: BitGet Word8
              fail errMsg0
-      r = runGetPartial (runBitGet p) `feedLBS` lbs
+      r = runGetIncremental (runBitGet p) `pushChunks` lbs
   in case r of
        Fail remainingBS pos errMsg ->
          and [ L.fromChunks [remainingBS] == L.drop expectedBytesConsumed lbs
