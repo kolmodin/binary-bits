@@ -212,10 +212,10 @@ prop_fail lbs errMsg0 = forAll (choose (0, 8 * L.length lbs)) $ \len ->
        _ -> False
 
 -- | number of bits required to write @v@
-bitreq :: (Num b, Bits a, Ord a) => a -> b
+bitreq :: (Num b, Num a, Bits a, Ord a) => a -> b
 bitreq v = fromIntegral . head $ [ req | (req, top) <- bittable, v <= top ]
 
-bittable :: Bits a => [(Integer, a)]
+bittable :: (Bits a, Num a) => [(Integer, a)]
 bittable = [ (fromIntegral x, (1 `shiftL` x) - 1) | x <- [1..64] ]
 
 prop_bitreq :: W Word64 -> Property
@@ -238,7 +238,7 @@ prop_composite_case b (W w) = w < 0x8000 ==>
       w' = runGet (runBitGet g) lbs
   in w == w'
 
-prop_compare_put_with_naive :: (Bits a, BinaryBit a, Ord a) => W [a] -> Property
+prop_compare_put_with_naive :: (Bits a, BinaryBit a, Ord a, Num a) => W [a] -> Property
 prop_compare_put_with_naive (W ws) = property $
   let pn = mapM_ (\v -> naive_put (bitreq v) v) ws
       p  = mapM_ (\v -> putBits   (bitreq v) v) ws
