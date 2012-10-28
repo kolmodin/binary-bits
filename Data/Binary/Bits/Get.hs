@@ -182,7 +182,7 @@ incS o (S bs n) =
   in S (unsafeDrop d bs) n'
 
 -- | make_mask 3 = 00000111
-make_mask :: Bits a => Int -> a
+make_mask :: (Bits a, Num a) => Int -> a
 make_mask n = (1 `shiftL` fromIntegral n) - 1
 {-# SPECIALIZE make_mask :: Int -> Int #-}
 {-# SPECIALIZE make_mask :: Int -> Word #-}
