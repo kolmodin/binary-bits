@@ -81,10 +81,11 @@ module Data.Binary.Bits.Get
 
             ) where
 
-import Data.Binary.Get as B ( runGet, Get, getByteString )
+import Data.Binary.Get as B ( runGet, Get, getByteString, getLazyByteString )
 import Data.Binary.Get.Internal as B ( get, put, ensureN )
 
 import Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
 import Data.ByteString.Unsafe
 
 import Data.Bits
@@ -413,6 +414,12 @@ getWord64be n = block (word64be n)
 -- | Get @n@ bytes as a 'ByteString'.
 getByteString :: Int -> BitGet ByteString
 getByteString n = block (byteString n)
+
+getLazyByteString :: Int -> BitGet L.ByteString
+getLazyByteString m = B $ \ (S n bs) -> do
+  putBackState n bs
+  lbs <- B.getLazyByteString (fromIntegral m)
+  return (S B.empty 0, lbs)
 
 -- | Read a 1 bit 'Bool'.
 bool :: Block Bool
