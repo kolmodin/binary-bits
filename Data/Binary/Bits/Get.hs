@@ -78,6 +78,7 @@ module Data.Binary.Bits.Get
             , word64be
             , byteString
             , Data.Binary.Bits.Get.getByteString
+            , Data.Binary.Bits.Get.getLazyByteString
 
             ) where
 
