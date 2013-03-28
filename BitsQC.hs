@@ -43,6 +43,13 @@ tests =
   , testGroup "getByteString"
       [ testProperty "prop_getByteString_negative" prop_getByteString_negative ]
 
+  , testGroup "getLazyByteString"
+      [ testProperty "getLazyByteString == getByteString"
+                     prop_getLazyByteString_equal_to_ByteString
+      , testProperty "getLazyByteString == getByteString (with shift)"
+                     prop_getLazyByteString_equal_to_ByteString2
+      ]
+
   , testGroup "Fail"
       [ testProperty "monadic fail" prop_fail ]
 
@@ -110,6 +117,17 @@ tests =
       ]
   ]
 
+prop_getLazyByteString_equal_to_ByteString :: L.ByteString -> Int -> Property
+prop_getLazyByteString_equal_to_ByteString bs n =
+  (fromIntegral n) <= L.length bs ==>
+    runGet (runBitGet (getLazyByteString (fromIntegral n))) bs ==
+            (L.fromChunks . (:[]) $ runGet (runBitGet (getByteString n)) bs)
+
+prop_getLazyByteString_equal_to_ByteString2 :: L.ByteString -> Int -> Property
+prop_getLazyByteString_equal_to_ByteString2 bs n =
+  (L.length bs > 1) && (fromIntegral n) < L.length bs ==>
+    runGet (runBitGet (getWord8 2 >> getLazyByteString (fromIntegral n))) bs ==
+            (L.fromChunks . (:[]) $ runGet (runBitGet (getWord8 2 >> getByteString n)) bs)
 
 prop_getByteString_negative :: Int -> Property
 prop_getByteString_negative n =

@@ -416,11 +416,16 @@ getWord64be n = block (word64be n)
 getByteString :: Int -> BitGet ByteString
 getByteString n = block (byteString n)
 
+-- | Get @n@ bytes as a lazy ByteString.
 getLazyByteString :: Int -> BitGet L.ByteString
-getLazyByteString m = B $ \ (S n bs) -> do
-  putBackState n bs
-  lbs <- B.getLazyByteString (fromIntegral m)
-  return (S B.empty 0, lbs)
+getLazyByteString n = do
+  (S _ o) <- getState
+  case o of
+    0 -> B $ \ (S bs o') -> do
+            putBackState bs o'
+            lbs <- B.getLazyByteString (fromIntegral n)
+            return (S B.empty 0, lbs)
+    _ -> L.fromChunks . (:[]) <$> Data.Binary.Bits.Get.getByteString n
 
 -- | Read a 1 bit 'Bool'.
 bool :: Block Bool
