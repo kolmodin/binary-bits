@@ -79,10 +79,11 @@ module Data.Binary.Bits.Get
             , byteString
             , Data.Binary.Bits.Get.getByteString
             , Data.Binary.Bits.Get.getLazyByteString
+            , Data.Binary.Bits.Get.isEmpty
 
             ) where
 
-import Data.Binary.Get as B ( runGet, Get, getByteString, getLazyByteString )
+import Data.Binary.Get as B ( runGet, Get, getByteString, getLazyByteString, isEmpty )
 import Data.Binary.Get.Internal as B ( get, put, ensureN )
 
 import Data.ByteString as B
@@ -91,7 +92,6 @@ import Data.ByteString.Unsafe
 
 import Data.Bits
 import Data.Word
-
 import Control.Applicative
 
 import Prelude as P
@@ -426,6 +426,11 @@ getLazyByteString n = do
             lbs <- B.getLazyByteString (fromIntegral n)
             return (S B.empty 0, lbs)
     _ -> L.fromChunks . (:[]) <$> Data.Binary.Bits.Get.getByteString n
+
+-- | Test whether all input has been consumed, i.e. there are no remaining
+-- undecoded bytes.
+isEmpty :: BitGet Bool
+isEmpty = B $ \ (S bs o) -> B.isEmpty >>= \e -> return (S bs o, e)
 
 -- | Read a 1 bit 'Bool'.
 bool :: Block Bool

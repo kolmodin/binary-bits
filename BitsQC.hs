@@ -50,6 +50,13 @@ tests =
                      prop_getLazyByteString_equal_to_ByteString2
       ]
 
+  , testGroup "isEmpty"
+      [ testProperty "prop_isEmptyOfEmptyEmpty" prop_isEmptyOfEmptyEmpty
+      , testProperty "prop_isEmptyOfNonEmptyEmpty" prop_isEmptyOfNonEmptyEmpty
+      , testProperty "prop_isEmptyOfConsumedEmpty" prop_isEmptyOfConsumedEmpty
+      , testProperty "prop_isEmptyOfNotConsumedNotEmpty" prop_isEmptyOfNotConsumedNotEmpty
+      ]
+
   , testGroup "Fail"
       [ testProperty "monadic fail" prop_fail ]
 
@@ -116,6 +123,23 @@ tests =
       , testProperty "Word64" (prop_bitget_bytestring_interspersed :: W Word64 -> [B.ByteString] -> Property)
       ]
   ]
+
+prop_isEmptyOfEmptyEmpty :: Bool
+prop_isEmptyOfEmptyEmpty = runGet (runBitGet isEmpty) L.empty
+
+prop_isEmptyOfNonEmptyEmpty :: L.ByteString -> Property
+prop_isEmptyOfNonEmptyEmpty bs =
+  not (L.null bs) ==> runGet (runBitGet isEmpty) bs == False
+
+prop_isEmptyOfConsumedEmpty :: L.ByteString -> Int -> Property
+prop_isEmptyOfConsumedEmpty bs n =
+  (fromIntegral n) == L.length bs && not (L.null bs) ==>
+    runGet (runBitGet (getByteString n >> isEmpty)) bs == True
+
+prop_isEmptyOfNotConsumedNotEmpty :: L.ByteString -> Int -> Property
+prop_isEmptyOfNotConsumedNotEmpty bs n =
+  (fromIntegral n) < L.length bs && not (L.null bs) ==>
+    runGet (runBitGet (getByteString n >> isEmpty)) bs == False
 
 prop_getLazyByteString_equal_to_ByteString :: L.ByteString -> Int -> Property
 prop_getLazyByteString_equal_to_ByteString bs n =
