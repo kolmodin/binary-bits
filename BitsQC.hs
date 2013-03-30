@@ -1,13 +1,10 @@
 {-# LANGUAGE CPP, FlexibleInstances, FlexibleContexts, TupleSections #-}
 
-module Main where
+module Main ( main ) where
 
-import Data.Binary ( encode, Binary(..) )
+import Data.Binary ( Binary(..) )
 import Data.Binary.Get ( runGet, runGetIncremental, pushChunks, Decoder(..) )
 import Data.Binary.Put ( runPut )
-
-import qualified Data.Binary.Get as BG ( getWord8, getWord16be, getWord32be, getWord64be )
-import qualified Data.Binary.Put as BP ( putWord8, putWord16be, putWord32be, putWord64be )
 
 import Data.Binary.Bits
 import Data.Binary.Bits.Get
@@ -18,18 +15,16 @@ import qualified Data.ByteString.Lazy as L
 
 import Control.Applicative
 import Data.Bits
-import Data.Monoid
 import Data.Word
 import Foreign.Storable
 import System.Random
 
-import Test.Framework.Options ( TestOptions'(..) )
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.Framework.Runners.Console ( defaultMain )
-import Test.Framework.Runners.Options ( RunnerOptions'(..) )
 import Test.Framework ( Test, testGroup )
 import Test.QuickCheck
 
+main :: IO ()
 main = defaultMain tests
 
 tests :: [Test]
@@ -130,7 +125,7 @@ prop_putget_with_bitreq (W w) = property $
 prop_putget_list_simple :: (BinaryBit a, Eq a, Storable a) => W [a] -> Property
 prop_putget_list_simple (W ws) = property $
   let s = sizeOf (head ws) * 8
-      p = mapM_ (\v -> putBits s v) ws
+      p = mapM_ (putBits s) ws
       g = mapM  (const (getBits s)) ws
       lbs = runPut (runBitPut p)
       ws' = runGet (runBitGet g) lbs
@@ -187,7 +182,7 @@ prop_bitget_with_put_from_binary (W ws) = property $
 prop_bitget_bytestring_interspersed :: (BinaryBit a, Binary a, Num a, Ord a, Bits a) => W a -> [B.ByteString] -> Property
 prop_bitget_bytestring_interspersed (W ws) bss = property $
   let p = mapM_ (\bs -> putBits (bitreq ws) ws >> putByteString bs) bss
-      g = mapM (\bs -> (,) <$> (getBits (bitreq ws)) <*> (getByteString (B.length bs))) bss
+      g = mapM (\bs -> (,) <$> getBits (bitreq ws) <*> getByteString (B.length bs)) bss
       lbs = runPut (runBitPut p)
       r = runGet (runBitGet g) lbs
   in map (ws,) bss == r
@@ -221,7 +216,7 @@ bittable = [ (fromIntegral x, (1 `shiftL` x) - 1) | x <- [1..64] ]
 prop_bitreq :: W Word64 -> Property
 prop_bitreq (W w) = property $
   ( w == 0 && bitreq w == 1 )
-    || bitreq w == (bitreq (w `shiftR` 1)) + 1
+    || bitreq w == bitreq (w `shiftR` 1) + 1
 
 prop_composite_case :: Bool -> W Word16 -> Property
 prop_composite_case b (W w) = w < 0x8000 ==>
@@ -255,7 +250,7 @@ prop_compare_get_with_naive (W ws) = property $
       rn = runGet (runBitGet gn) lbs
       r  = runGet (runBitGet g ) lbs
       -- we must help our compiler to resolve the types of 'gn' and 'g'
-      types = rn == ws && r == ws
+      _types = rn == ws && r == ws
   in rn == r
 
 -- | Write one bit at a time until the full word has been written
