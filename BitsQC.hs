@@ -38,6 +38,20 @@ tests =
   , testGroup "getByteString"
       [ testProperty "prop_getByteString_negative" prop_getByteString_negative ]
 
+  , testGroup "getLazyByteString"
+      [ testProperty "getLazyByteString == getByteString"
+                     prop_getLazyByteString_equal_to_ByteString
+      , testProperty "getLazyByteString == getByteString (with shift)"
+                     prop_getLazyByteString_equal_to_ByteString2
+      ]
+
+  , testGroup "isEmpty"
+      [ testProperty "prop_isEmptyOfEmptyEmpty" prop_isEmptyOfEmptyEmpty
+      , testProperty "prop_isEmptyOfNonEmptyEmpty" prop_isEmptyOfNonEmptyEmpty
+      , testProperty "prop_isEmptyOfConsumedEmpty" prop_isEmptyOfConsumedEmpty
+      , testProperty "prop_isEmptyOfNotConsumedNotEmpty" prop_isEmptyOfNotConsumedNotEmpty
+      ]
+
   , testGroup "Fail"
       [ testProperty "monadic fail" prop_fail ]
 
@@ -105,6 +119,35 @@ tests =
       ]
   ]
 
+prop_isEmptyOfEmptyEmpty :: Bool
+prop_isEmptyOfEmptyEmpty = runGet (runBitGet isEmpty) L.empty
+
+prop_isEmptyOfNonEmptyEmpty :: L.ByteString -> Property
+prop_isEmptyOfNonEmptyEmpty bs =
+  not (L.null bs) ==> not (runGet (runBitGet isEmpty) bs)
+
+prop_isEmptyOfConsumedEmpty :: L.ByteString -> Property
+prop_isEmptyOfConsumedEmpty bs =
+  not (L.null bs) ==>
+    runGet (runBitGet (getByteString n >> isEmpty)) bs
+    where n = fromIntegral $ L.length bs
+
+prop_isEmptyOfNotConsumedNotEmpty :: L.ByteString -> Int -> Property
+prop_isEmptyOfNotConsumedNotEmpty bs n =
+  (fromIntegral n) < L.length bs && not (L.null bs) ==>
+    not (runGet (runBitGet (getByteString n >> isEmpty)) bs)
+
+prop_getLazyByteString_equal_to_ByteString :: L.ByteString -> Int -> Property
+prop_getLazyByteString_equal_to_ByteString bs n =
+  (fromIntegral n) <= L.length bs ==>
+    runGet (runBitGet (getLazyByteString (fromIntegral n))) bs ==
+            (L.fromChunks . (:[]) $ runGet (runBitGet (getByteString n)) bs)
+
+prop_getLazyByteString_equal_to_ByteString2 :: L.ByteString -> Int -> Property
+prop_getLazyByteString_equal_to_ByteString2 bs n =
+  (L.length bs > 1) && (fromIntegral n) < L.length bs ==>
+    runGet (runBitGet (getWord8 2 >> getLazyByteString (fromIntegral n))) bs ==
+            (L.fromChunks . (:[]) $ runGet (runBitGet (getWord8 2 >> getByteString n)) bs)
 
 prop_getByteString_negative :: Int -> Property
 prop_getByteString_negative n =
