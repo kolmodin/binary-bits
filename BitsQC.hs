@@ -129,17 +129,18 @@ prop_isEmptyOfEmptyEmpty = runGet (runBitGet isEmpty) L.empty
 
 prop_isEmptyOfNonEmptyEmpty :: L.ByteString -> Property
 prop_isEmptyOfNonEmptyEmpty bs =
-  not (L.null bs) ==> runGet (runBitGet isEmpty) bs == False
+  not (L.null bs) ==> not (runGet (runBitGet isEmpty) bs)
 
-prop_isEmptyOfConsumedEmpty :: L.ByteString -> Int -> Property
-prop_isEmptyOfConsumedEmpty bs n =
-  (fromIntegral n) == L.length bs && not (L.null bs) ==>
-    runGet (runBitGet (getByteString n >> isEmpty)) bs == True
+prop_isEmptyOfConsumedEmpty :: L.ByteString -> Property
+prop_isEmptyOfConsumedEmpty bs =
+  not (L.null bs) ==>
+    runGet (runBitGet (getByteString n >> isEmpty)) bs
+    where n = fromIntegral $ L.length bs
 
 prop_isEmptyOfNotConsumedNotEmpty :: L.ByteString -> Int -> Property
 prop_isEmptyOfNotConsumedNotEmpty bs n =
   (fromIntegral n) < L.length bs && not (L.null bs) ==>
-    runGet (runBitGet (getByteString n >> isEmpty)) bs == False
+    not (runGet (runBitGet (getByteString n >> isEmpty)) bs)
 
 prop_getLazyByteString_equal_to_ByteString :: L.ByteString -> Int -> Property
 prop_getLazyByteString_equal_to_ByteString bs n =
