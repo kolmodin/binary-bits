@@ -430,7 +430,9 @@ getLazyByteString n = do
 -- | Test whether all input has been consumed, i.e. there are no remaining
 -- undecoded bytes.
 isEmpty :: BitGet Bool
-isEmpty = B $ \ (S bs o) -> B.isEmpty >>= \e -> return (S bs o, e)
+isEmpty = B $ \ (S bs o) -> if B.null bs
+                               then B.isEmpty >>= \e -> return (S bs o, e)
+                               else return (S bs o, False)
 
 -- | Read a 1 bit 'Bool'.
 bool :: Block Bool
