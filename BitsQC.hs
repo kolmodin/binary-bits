@@ -117,6 +117,10 @@ tests =
       , testProperty "Word32" (prop_bitget_bytestring_interspersed :: W Word32 -> [B.ByteString] -> Property)
       , testProperty "Word64" (prop_bitget_bytestring_interspersed :: W Word64 -> [B.ByteString] -> Property)
       ]
+  , testGroup "Simulate programs"
+      [ testProperty "primitive" prop_primitive
+      , testProperty "many primitives in sequence" prop_program 
+      ]
   ]
 
 prop_isEmptyOfEmptyEmpty :: Bool
@@ -374,6 +378,82 @@ integralRandomR :: (Integral a, RandomGen g) => (a,a) -> g -> (a,g)
 integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
                                          fromIntegral b :: Integer) g of
                             (x,g) -> (fromIntegral x, g)
+
+data Primitive
+  = W8  Int Word8
+  | W16 Int Word16
+  | W32 Int Word32
+  | W64 Int Word64
+  | BS  Int B.ByteString
+  | LBS Int L.ByteString
+  deriving (Eq, Show)
+
+type Program = [Primitive]
+
+instance Arbitrary Primitive where
+  arbitrary = do
+    let gen c = do
+          let (maxBits, _) = (\w -> (bitSize w, c undefined w)) undefined
+          bits <- choose (0, maxBits)
+          n <- choose (0, fromIntegral (2^bits-1))
+          return (c bits n)
+    oneof
+      [ gen W8
+      , gen W16
+      , gen W32
+      , gen W64
+      , do n <- choose (0,10)
+           cs <- vector n
+           return (BS n (B.pack cs))
+      , do n <- choose (0,10)
+           cs <- vector n
+           return (LBS n (L.pack cs))
+      ]
+  shrink p =
+    let snk c x = map (\x' -> c (bitreq x') x') (shrinker x) in
+    case p of
+      W8 _ x -> snk W8 x
+      W16 _ x -> snk W16 x
+      W32 _ x -> snk W32 x
+      W64 _ x -> snk W64 x
+      BS _ bs -> let ws = B.unpack bs in map (\ws' -> BS (length ws') (B.pack ws')) (shrink ws)
+      LBS _ lbs -> let ws = L.unpack lbs in map (\ws' -> LBS (length ws') (L.pack ws')) (shrink ws)
+
+prop_primitive :: Primitive -> Property
+prop_primitive prim = property $
+  let p = putPrimitive prim
+      g = getPrimitive prim
+      lbs = runPut (runBitPut p)
+      r = runGet (runBitGet g) lbs
+  in r == prim
+
+prop_program :: Program -> Property
+prop_program program = property $
+  let p = mapM_ putPrimitive program
+      g = mapM getPrimitive program
+      lbs = runPut (runBitPut p)
+      r = runGet (runBitGet g) lbs
+  in r == program
+
+putPrimitive :: Primitive -> BitPut ()
+putPrimitive p =
+  case p of
+    W8 n x -> putWord8 n x
+    W16 n x -> putWord16be n x
+    W32 n x -> putWord32be n x
+    W64 n x -> putWord64be n x
+    BS _ bs -> putByteString bs
+    LBS _ lbs -> mapM_ putByteString (L.toChunks lbs)
+
+getPrimitive :: Primitive -> BitGet Primitive
+getPrimitive p =
+  case p of
+    W8 n _ -> W8 n <$> getWord8 n
+    W16 n _ -> W16 n <$> getWord16be n
+    W32 n _ -> W32 n <$> getWord32be n
+    W64 n _ -> W64 n <$> getWord64be n
+    BS n _ -> BS n <$> getByteString n
+    LBS n _ -> LBS n <$> getLazyByteString n
 
 {-
 instance Random Word where
