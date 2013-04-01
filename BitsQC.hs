@@ -386,6 +386,7 @@ data Primitive
   | W64 Int Word64
   | BS  Int B.ByteString
   | LBS Int L.ByteString
+  | IsEmpty
   deriving (Eq, Show)
 
 type Program = [Primitive]
@@ -408,6 +409,7 @@ instance Arbitrary Primitive where
       , do n <- choose (0,10)
            cs <- vector n
            return (LBS n (L.pack cs))
+      , return IsEmpty
       ]
   shrink p =
     let snk c x = map (\x' -> c (bitreq x') x') (shrinker x) in
@@ -418,6 +420,7 @@ instance Arbitrary Primitive where
       W64 _ x -> snk W64 x
       BS _ bs -> let ws = B.unpack bs in map (\ws' -> BS (length ws') (B.pack ws')) (shrink ws)
       LBS _ lbs -> let ws = L.unpack lbs in map (\ws' -> LBS (length ws') (L.pack ws')) (shrink ws)
+      IsEmpty -> []
 
 prop_primitive :: Primitive -> Property
 prop_primitive prim = property $
@@ -430,10 +433,10 @@ prop_primitive prim = property $
 prop_program :: Program -> Property
 prop_program program = property $
   let p = mapM_ putPrimitive program
-      g = mapM getPrimitive program
+      g = verifyProgram (8 * fromIntegral (L.length lbs)) program
       lbs = runPut (runBitPut p)
       r = runGet (runBitGet g) lbs
-  in r == program
+  in r
 
 putPrimitive :: Primitive -> BitPut ()
 putPrimitive p =
@@ -444,6 +447,7 @@ putPrimitive p =
     W64 n x -> putWord64be n x
     BS _ bs -> putByteString bs
     LBS _ lbs -> mapM_ putByteString (L.toChunks lbs)
+    IsEmpty -> return ()
 
 getPrimitive :: Primitive -> BitGet Primitive
 getPrimitive p =
@@ -454,6 +458,32 @@ getPrimitive p =
     W64 n _ -> W64 n <$> getWord64be n
     BS n _ -> BS n <$> getByteString n
     LBS n _ -> LBS n <$> getLazyByteString n
+    IsEmpty -> isEmpty >> return IsEmpty
+
+
+verifyProgram :: Int -> Program -> BitGet Bool
+verifyProgram totalLength ps0 = go 0 ps0
+  where
+    go _ [] = return True
+    go pos (p:ps) =
+      case p of
+        W8 n x ->  check x (getWord8 n) >> go (pos+n) ps
+        W16 n x -> check x (getWord16be n) >> go (pos+n) ps
+        W32 n x -> check x (getWord32be n) >> go (pos+n) ps
+        W64 n x -> check x (getWord64be n) >> go (pos+n) ps
+        BS n x -> check x (getByteString n) >> go (pos+(8*n)) ps
+        LBS n x -> check x (getLazyByteString n) >> go (pos+(8*n)) ps
+        IsEmpty -> do
+          let expected = pos == totalLength
+          actual <- isEmpty
+          if expected == actual
+            then go pos ps
+            else error "isEmpty returned wrong value"
+    check x g = do
+      y <- g
+      if x == y
+        then return ()
+        else error "fail fail fail!"
 
 {-
 instance Random Word where
