@@ -50,7 +50,7 @@ data S = S !Builder !Word8 !Int
 
 -- | Put a 1 bit 'Bool'.
 putBool :: Bool -> BitPut ()
-putBool b = putWord8 1 (if b then 1 else 0)
+putBool b = putWord8 1 (if b then 0xff else 0x00)
 
 -- | Put the @n@ lower bits of a 'Word8'.
 putWord8 :: Int -> Word8 -> BitPut ()
