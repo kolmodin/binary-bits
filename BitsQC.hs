@@ -380,7 +380,8 @@ integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
                             (x,g) -> (fromIntegral x, g)
 
 data Primitive
-  = W8  Int Word8
+  = Bool Bool
+  | W8  Int Word8
   | W16 Int Word16
   | W32 Int Word32
   | W64 Int Word64
@@ -399,7 +400,8 @@ instance Arbitrary Primitive where
           n <- choose (0, fromIntegral (2^bits-1))
           return (c bits n)
     oneof
-      [ gen W8
+      [ Bool <$> arbitrary
+      , gen W8
       , gen W16
       , gen W32
       , gen W64
@@ -414,6 +416,7 @@ instance Arbitrary Primitive where
   shrink p =
     let snk c x = map (\x' -> c (bitreq x') x') (shrinker x) in
     case p of
+      Bool b -> if b then [Bool False] else []
       W8 _ x -> snk W8 x
       W16 _ x -> snk W16 x
       W32 _ x -> snk W32 x
@@ -441,6 +444,7 @@ prop_program program = property $
 putPrimitive :: Primitive -> BitPut ()
 putPrimitive p =
   case p of
+    Bool b -> putBool b
     W8 n x -> putWord8 n x
     W16 n x -> putWord16be n x
     W32 n x -> putWord32be n x
@@ -452,6 +456,7 @@ putPrimitive p =
 getPrimitive :: Primitive -> BitGet Primitive
 getPrimitive p =
   case p of
+    Bool _ -> Bool <$> getBool
     W8 n _ -> W8 n <$> getWord8 n
     W16 n _ -> W16 n <$> getWord16be n
     W32 n _ -> W32 n <$> getWord32be n
@@ -467,6 +472,7 @@ verifyProgram totalLength ps0 = go 0 ps0
     go _ [] = return True
     go pos (p:ps) =
       case p of
+        Bool x -> check x getBool >> go (pos+1) ps
         W8 n x ->  check x (getWord8 n) >> go (pos+n) ps
         W16 n x -> check x (getWord16be n) >> go (pos+n) ps
         W32 n x -> check x (getWord32be n) >> go (pos+n) ps
@@ -478,12 +484,14 @@ verifyProgram totalLength ps0 = go 0 ps0
           actual <- isEmpty
           if expected == actual
             then go pos ps
-            else error "isEmpty returned wrong value"
+            else error $ "isEmpty returned wrong value, expected "
+                          ++ show expected ++ " but got " ++ show actual
     check x g = do
       y <- g
       if x == y
         then return ()
-        else error "fail fail fail!"
+        else error $ "Roundtrip error: Expected "
+                     ++ show x ++ " but got " ++ show y
 
 {-
 instance Random Word where
