@@ -52,20 +52,31 @@ data S = S !Builder !Word8 !Int
 putBool :: Bool -> BitPut ()
 putBool b = putWord8 1 (if b then 0xff else 0x00)
 
+-- | make_mask 3 = 00000111
+make_mask :: (Bits a, Num a) => Int -> a
+make_mask n = (1 `shiftL` fromIntegral n) - 1
+{-# SPECIALIZE make_mask :: Int -> Int #-}
+{-# SPECIALIZE make_mask :: Int -> Word #-}
+{-# SPECIALIZE make_mask :: Int -> Word8 #-}
+{-# SPECIALIZE make_mask :: Int -> Word16 #-}
+{-# SPECIALIZE make_mask :: Int -> Word32 #-}
+{-# SPECIALIZE make_mask :: Int -> Word64 #-}
+
 -- | Put the @n@ lower bits of a 'Word8'.
 putWord8 :: Int -> Word8 -> BitPut ()
 putWord8 n w = BitPut $ \s -> PairS () $
+  let w' = make_mask n .&. w in
   case s of
                 -- a whole word8, no offset
     (S b t o) | n == 8 && o == 0 -> flush $ S b w n
                 -- less than a word8, will fit in the current word8
-              | n <= 8 - o       -> flush $ S b (t .|. (w `shiftL` (8 - n - o))) (o+n)
+              | n <= 8 - o       -> flush $ S b (t .|. (w' `shiftL` (8 - n - o))) (o+n)
                 -- will finish this word8, and spill into the next one
               | otherwise -> flush $
                               let o' = o + n - 8
-                                  w' = t .|. (w `shiftR` o')
+                                  b' = t .|. (w' `shiftR` o')
                                   t' = w `shiftL` (8 - o')
-                              in S (b `mappend` B.singleton w') t' o'
+                              in S (b `mappend` B.singleton b') t' o'
 
 -- | Put the @n@ lower bits of a 'Word16'.
 putWord16be :: Int -> Word16 -> BitPut ()
@@ -73,22 +84,23 @@ putWord16be n w
   | n <= 8 = putWord8 n (fromIntegral w)
   | otherwise =
       BitPut $ \s -> PairS () $
+        let w' = make_mask n .&. w in
         case s of
           -- as n>=9, it's too big to fit into one single byte
           -- it'll either use 2 or 3 bytes
                                      -- it'll fit in 2 bytes
           (S b t o) | o + n <= 16 -> flush $
                         let o' = o + n - 8
-                            w' = t .|. fromIntegral (w `shiftR` o')
+                            b' = t .|. fromIntegral (w' `shiftR` o')
                             t' = fromIntegral (w `shiftL` (8-o'))
-                        in (S (b `mappend` B.singleton w') t' o')
+                        in (S (b `mappend` B.singleton b') t' o')
                                    -- 3 bytes required
                     | otherwise -> flush $
                         let o'  = o + n - 16
-                            w'  = t .|. fromIntegral (w `shiftR` (o' + 8))
-                            w'' = fromIntegral ((w `shiftR` o') .&. 0xff)
+                            b'  = t .|. fromIntegral (w' `shiftR` (o' + 8))
+                            b'' = fromIntegral ((w `shiftR` o') .&. 0xff)
                             t'  = fromIntegral (w `shiftL` (8-o'))
-                        in (S (b `mappend` B.singleton w' `mappend` B.singleton w'') t' o')
+                        in (S (b `mappend` B.singleton b' `mappend` B.singleton b'') t' o')
 
 -- | Put the @n@ lower bits of a 'Word32'.
 putWord32be :: Int -> Word32 -> BitPut ()
