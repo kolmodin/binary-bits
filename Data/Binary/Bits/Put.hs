@@ -38,6 +38,7 @@ import Data.Binary.Put ( Put )
 
 import Data.ByteString
 
+import Control.Applicative
 import Data.Bits
 import Data.Monoid
 import Data.Word
@@ -153,6 +154,18 @@ runBitPut m = Put.putBuilder b
   where
   PairS _ s = run m (S mempty 0 0)
   (S b _ _) = flushIncomplete s
+
+instance Functor BitPut where
+  fmap f (BitPut k) = BitPut $ \s ->
+    let PairS x s' = k s
+    in PairS (f x) s'
+
+instance Applicative BitPut where
+  pure a = BitPut (\s -> PairS a s)
+  (BitPut f) <*> (BitPut g) = BitPut $ \s ->
+    let PairS a s' = f s
+        PairS b s'' = g s'
+    in PairS (a b) s''
 
 instance Monad BitPut where
   m >>= k = BitPut $ \s ->
