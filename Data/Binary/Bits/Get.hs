@@ -64,6 +64,10 @@ module Data.Binary.Bits.Get
             , getWord32be
             , getWord64be
 
+            -- ** Skip bits
+            , skipBits
+            , alignByte
+
             -- * Blocks
 
             -- $blocks
@@ -93,6 +97,7 @@ import Data.ByteString.Unsafe
 import Data.Bits
 import Data.Word
 import Control.Applicative
+import Control.Monad (when)
 
 import Prelude as P
 
@@ -391,6 +396,20 @@ ensureBits n = do
                          bs' <- B.get
                          put B.empty
                          return (S (bs`append`bs') o, ())
+
+-- | Skip the given number of bits
+skipBits :: Int -> BitGet ()
+skipBits n = do
+   ensureBits n
+   s <- getState
+   putState $! (incS n s)
+
+-- | Skip bits if necessary to align on a byte
+alignByte :: BitGet ()
+alignByte = do
+   (S _ n) <- getState
+   when (n /= 0) $
+      skipBits (8-n)
 
 -- | Get 1 bit as a 'Bool'.
 getBool :: BitGet Bool
