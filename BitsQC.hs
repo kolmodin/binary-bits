@@ -9,6 +9,7 @@ import Data.Binary.Put ( runPut )
 import Data.Binary.Bits
 import Data.Binary.Bits.Get
 import Data.Binary.Bits.Put
+import Data.Binary.Bits.BitOrder
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
@@ -17,7 +18,8 @@ import Control.Applicative
 import Data.Bits
 import Data.Word
 import Foreign.Storable
-import System.Random
+import Data.Traversable (traverse)
+import Data.Foldable (traverse_)
 
 import Test.Framework.Providers.QuickCheck2 ( testProperty )
 import Test.Framework.Runners.Console ( defaultMain )
@@ -36,7 +38,10 @@ tests =
       [ testProperty "prop_composite_case" prop_composite_case ]
 
   , testGroup "getByteString"
-      [ testProperty "prop_getByteString_negative" prop_getByteString_negative ]
+      [ testProperty "prop_getByteString_negative" prop_getByteString_negative 
+      , testProperty "prop_putByteString_getByteString" (prop_putByteString_getByteString :: BitOrder -> B.ByteString -> Property)
+      , testProperty "prop_putByteString_getByteString_many" (prop_putByteString_getByteString_many :: BitOrder -> [B.ByteString] -> Property)
+      ]
 
   , testGroup "getLazyByteString"
       [ testProperty "getLazyByteString == getByteString"
@@ -84,10 +89,10 @@ tests =
       ]
 
   , testGroup "prop_put_with_bitreq"
-      [ testProperty "Word8"  (prop_putget_with_bitreq :: W Word8  -> Property)
-      , testProperty "Word16" (prop_putget_with_bitreq :: W Word16 -> Property)
-      , testProperty "Word32" (prop_putget_with_bitreq :: W Word32 -> Property)
-      , testProperty "Word64" (prop_putget_with_bitreq :: W Word64 -> Property)
+      [ testProperty "Word8"  (prop_putget_with_bitreq :: BitOrder -> W Word8  -> Property)
+      , testProperty "Word16" (prop_putget_with_bitreq :: BitOrder -> W Word16 -> Property)
+      , testProperty "Word32" (prop_putget_with_bitreq :: BitOrder -> W Word32 -> Property)
+      , testProperty "Word64" (prop_putget_with_bitreq :: BitOrder -> W Word64 -> Property)
       ]
 
   , testGroup "prop_putget_list_simple"
@@ -112,10 +117,10 @@ tests =
       , testProperty "Word64" (prop_putget_list_with_bitreq :: W [Word64] -> Property)
       ]
   , testGroup "prop_bitget_bytestring_interspersed"
-      [ testProperty "Word8"  (prop_bitget_bytestring_interspersed :: W Word8  -> [B.ByteString] -> Property)
-      , testProperty "Word16" (prop_bitget_bytestring_interspersed :: W Word16 -> [B.ByteString] -> Property)
-      , testProperty "Word32" (prop_bitget_bytestring_interspersed :: W Word32 -> [B.ByteString] -> Property)
-      , testProperty "Word64" (prop_bitget_bytestring_interspersed :: W Word64 -> [B.ByteString] -> Property)
+      [ testProperty "Word8"  (prop_bitget_bytestring_interspersed :: BitOrder -> W Word8  -> [B.ByteString] -> Property)
+      , testProperty "Word16" (prop_bitget_bytestring_interspersed :: BitOrder -> W Word16 -> [B.ByteString] -> Property)
+      , testProperty "Word32" (prop_bitget_bytestring_interspersed :: BitOrder -> W Word32 -> [B.ByteString] -> Property)
+      , testProperty "Word64" (prop_bitget_bytestring_interspersed :: BitOrder -> W Word64 -> [B.ByteString] -> Property)
       ]
   , testGroup "Simulate programs"
       [ testProperty "primitive" prop_primitive
@@ -158,13 +163,28 @@ prop_getByteString_negative n =
   n < 1 ==>
     runGet (runBitGet (getByteString n)) L.empty == B.empty
 
-prop_putget_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => W a -> Property
-prop_putget_with_bitreq (W w) = property $
+prop_putByteString_getByteString :: BitOrder -> B.ByteString -> Property
+prop_putByteString_getByteString bo bs = property $ bs' == bs
+   where
+      n   = B.length bs
+      w   = runPut (runBitPut (withBitOrder bo (putByteString bs)))
+      bs' = runGet (runBitGet (withBitOrder bo (getByteString n))) w
+
+prop_putByteString_getByteString_many :: BitOrder -> [B.ByteString] -> Property
+prop_putByteString_getByteString_many bo bs = property $ bs' == bs
+   where
+      n   = fmap B.length bs
+      w   = runPut (runBitPut (withBitOrder bo (traverse_ putByteString bs)))
+      bs' = runGet (runBitGet (withBitOrder bo (traverse getByteString n))) w
+
+
+prop_putget_with_bitreq :: (BinaryBit a, Num a, Bits a, Ord a) => BitOrder -> W a -> Property
+prop_putget_with_bitreq bo (W w) = property $
   -- write all words with as many bits as it's required
   let p = putBits (bitreq w) w
       g = getBits (bitreq w)
-      lbs = runPut (runBitPut p)
-      w' = runGet (runBitGet g) lbs
+      lbs = runPut (runBitPut (withBitOrder bo p))
+      w' = runGet (runBitGet (withBitOrder bo g)) lbs
   in w == w'
 
 -- | Write a list of items. Each item is written with the maximum amount of
@@ -226,12 +246,12 @@ prop_bitget_with_put_from_binary (W ws) = property $
   in ws == ws'
 
 -- | Write each 'ByteString' with a variable sized value as a separator.
-prop_bitget_bytestring_interspersed :: (BinaryBit a, Binary a, Num a, Ord a, Bits a) => W a -> [B.ByteString] -> Property
-prop_bitget_bytestring_interspersed (W ws) bss = property $
+prop_bitget_bytestring_interspersed :: (BinaryBit a, Binary a, Num a, Ord a, Bits a) => BitOrder -> W a -> [B.ByteString] -> Property
+prop_bitget_bytestring_interspersed bo (W ws) bss = property $
   let p = mapM_ (\bs -> putBits (bitreq ws) ws >> putByteString bs) bss
       g = mapM (\bs -> (,) <$> getBits (bitreq ws) <*> getByteString (B.length bs)) bss
-      lbs = runPut (runBitPut p)
-      r = runGet (runBitGet g) lbs
+      lbs = runPut (runBitPut (withBitOrder bo p))
+      r = runGet (runBitGet (withBitOrder bo g)) lbs
   in map (ws,) bss == r
 
 -- | Test failing.
@@ -241,8 +261,8 @@ prop_fail lbs errMsg0 = forAll (choose (0, 8 * L.length lbs)) $ \len ->
       expectedBytesConsumed
         | bits == 0 = bytes
         | otherwise = bytes + 1
-      p = do getByteString (fromIntegral bytes)
-             getBits (fromIntegral bits) :: BitGet Word8
+      p = do _ <- getByteString (fromIntegral bytes)
+             _ <- getBits (fromIntegral bits) :: BitGet Word8
              fail errMsg0
       r = runGetIncremental (runBitGet p) `pushChunks` lbs
   in case r of
@@ -268,10 +288,10 @@ prop_bitreq (W w) = property $
 prop_composite_case :: Bool -> W Word16 -> Property
 prop_composite_case b (W w) = w < 0x8000 ==>
   let p = do putBool b
-             putWord16be 15 w
+             putWord16 15 w
       g = do v <- getBool
              case v of
-              True -> getWord16be 15
+              True -> getWord16 15
               False -> do
                 msb <- getWord8 7
                 lsb <- getWord8 8
@@ -374,11 +394,6 @@ instance (Arbitrary (W a), Arbitrary (W b), Arbitrary (W c)) => Arbitrary (W (a,
     arbitrary          = ((W .) .) . (,,) <$> arbitraryW <*> arbitraryW <*> arbitraryW
     shrink (W (a,b,c)) = ((W .) .) . (,,) <$> shrinkW a <*> shrinkW b <*> shrinkW c
 
-integralRandomR :: (Integral a, RandomGen g) => (a,a) -> g -> (a,g)
-integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
-                                         fromIntegral b :: Integer) g of
-                            (x,g) -> (fromIntegral x, g)
-
 data Primitive
   = Bool Bool
   | W8  Int Word8
@@ -387,6 +402,7 @@ data Primitive
   | W64 Int Word64
   | BS  Int B.ByteString
   | LBS Int L.ByteString
+  | Skip Int
   | IsEmpty
   deriving (Eq, Show)
 
@@ -395,7 +411,7 @@ type Program = [Primitive]
 instance Arbitrary Primitive where
   arbitrary = do
     let gen c = do
-          let (maxBits, _) = (\w -> (bitSize w, c undefined w)) undefined
+          let (maxBits, _) = (\w -> (finiteBitSize w, c undefined w)) undefined
           bits <- choose (0, maxBits)
           n <- choose (0, fromIntegral (2^bits-1))
           return (c bits n)
@@ -405,6 +421,7 @@ instance Arbitrary Primitive where
       , gen W16
       , gen W32
       , gen W64
+      , Skip <$> choose (0, 3000)
       , do n <- choose (0,10)
            cs <- vector n
            return (BS n (B.pack cs))
@@ -421,9 +438,18 @@ instance Arbitrary Primitive where
       W16 _ x -> snk W16 x
       W32 _ x -> snk W32 x
       W64 _ x -> snk W64 x
+      Skip x -> Skip <$> shrink x
       BS _ bs -> let ws = B.unpack bs in map (\ws' -> BS (length ws') (B.pack ws')) (shrink ws)
       LBS _ lbs -> let ws = L.unpack lbs in map (\ws' -> LBS (length ws') (L.pack ws')) (shrink ws)
       IsEmpty -> []
+
+instance Arbitrary BitOrder where
+   arbitrary = elements [BB, LB, LL, BL]
+   shrink LL  = [BB,LB,BL]
+   shrink BL  = [BB,LB]
+   shrink LB  = [BB]
+   shrink BB  = []
+
 
 prop_primitive :: Primitive -> Property
 prop_primitive prim = property $
@@ -446,9 +472,10 @@ putPrimitive p =
   case p of
     Bool b -> putBool b
     W8 n x -> putWord8 n x
-    W16 n x -> putWord16be n x
-    W32 n x -> putWord32be n x
-    W64 n x -> putWord64be n x
+    W16 n x -> putWord16 n x
+    W32 n x -> putWord32 n x
+    W64 n x -> putWord64 n x
+    Skip n  -> skipBits n
     BS _ bs -> putByteString bs
     LBS _ lbs -> mapM_ putByteString (L.toChunks lbs)
     IsEmpty -> return ()
@@ -458,13 +485,25 @@ getPrimitive p =
   case p of
     Bool _ -> Bool <$> getBool
     W8 n _ -> W8 n <$> getWord8 n
-    W16 n _ -> W16 n <$> getWord16be n
-    W32 n _ -> W32 n <$> getWord32be n
-    W64 n _ -> W64 n <$> getWord64be n
+    W16 n _ -> W16 n <$> getWord16 n
+    W32 n _ -> W32 n <$> getWord32 n
+    W64 n _ -> W64 n <$> getWord64 n
+    Skip n  -> skipBits n >> return (Skip n)
     BS n _ -> BS n <$> getByteString n
     LBS n _ -> LBS n <$> getLazyByteString n
     IsEmpty -> isEmpty >> return IsEmpty
 
+getPrimitiveSize :: Primitive -> Int
+getPrimitiveSize p = case p of
+    Bool _  -> 1
+    W8 n _  -> n
+    W16 n _ -> n
+    W32 n _ -> n
+    W64 n _ -> n
+    Skip n  -> n
+    BS n _  -> n*8
+    LBS n _ -> n*8
+    IsEmpty -> 0
 
 verifyProgram :: Int -> Program -> BitGet Bool
 verifyProgram totalLength ps0 = go 0 ps0
@@ -472,13 +511,6 @@ verifyProgram totalLength ps0 = go 0 ps0
     go _ [] = return True
     go pos (p:ps) =
       case p of
-        Bool x -> check x getBool >> go (pos+1) ps
-        W8 n x ->  check x (getWord8 n) >> go (pos+n) ps
-        W16 n x -> check x (getWord16be n) >> go (pos+n) ps
-        W32 n x -> check x (getWord32be n) >> go (pos+n) ps
-        W64 n x -> check x (getWord64be n) >> go (pos+n) ps
-        BS n x -> check x (getByteString n) >> go (pos+(8*n)) ps
-        LBS n x -> check x (getLazyByteString n) >> go (pos+(8*n)) ps
         IsEmpty -> do
           let expected = pos == totalLength
           actual <- isEmpty
@@ -486,6 +518,7 @@ verifyProgram totalLength ps0 = go 0 ps0
             then go pos ps
             else error $ "isEmpty returned wrong value, expected "
                           ++ show expected ++ " but got " ++ show actual
+        _ -> check p (getPrimitive p) >> go (pos + getPrimitiveSize p) ps
     check x g = do
       y <- g
       if x == y
