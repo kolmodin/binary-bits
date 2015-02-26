@@ -87,7 +87,7 @@ module Data.Binary.Bits.Get
 
             ) where
 
-import Data.Binary.Get as B ( runGet, Get, getByteString, getLazyByteString, isEmpty )
+import Data.Binary.Get as B ( Get, getLazyByteString, isEmpty )
 import Data.Binary.Get.Internal as B ( get, put, ensureN )
 
 import Data.ByteString as B
@@ -222,11 +222,13 @@ readWord8 n (S bs o)
 
   -- the bits are in two different bytes
   -- make a word16 using both bytes, and then shift and mask
-  | n <= 8 = let w = (fromIntegral (unsafeHead bs) `shiftl_w16` 8) .|.
-                     (fromIntegral (unsafeIndex bs 1))
-                 m = make_mask n
-                 w' = (w `shiftr_w16` (16 - o - n)) .&. m
-             in fromIntegral w'
+  -- n <= 8
+  | otherwise = let
+                  w = (fromIntegral (unsafeHead bs) `shiftl_w16` 8) .|.
+                      (fromIntegral (unsafeIndex bs 1))
+                  m = make_mask n
+                  w' = (w `shiftr_w16` (16 - o - n)) .&. m
+                in fromIntegral w'
 
 {-# INLINE readWord16be #-}
 readWord16be :: Int -> S -> Word16
@@ -301,22 +303,23 @@ readWithoutOffset (S bs o) shifterL shifterR n
   | bit_offset n == 0 && byte_offset n <= 4 = 
               let segs = byte_offset n
                   bn 0 = fromIntegral (unsafeHead bs)
-                  bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
+                  bn m = (bn (m-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs m)
 
               in bn (segs-1)
 
-  | n <= 64 = let segs = byte_offset n
-                  o' = bit_offset (n - 8 + o)
+    -- n <= 64
+  | otherwise = let segs = byte_offset n
+                    o' = bit_offset (n - 8 + o)
 
-                  bn 0 = fromIntegral (unsafeHead bs)
-                  bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
+                    bn 0 = fromIntegral (unsafeHead bs)
+                    bn m = (bn (m-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs m)
 
-                  msegs = bn (segs-1) `shifterL` o'
+                    msegs = bn (segs-1) `shifterL` o'
 
-                  last = (fromIntegral (unsafeIndex bs segs)) `shifterR` (8 - o')
+                    lst = (fromIntegral (unsafeIndex bs segs)) `shifterR` (8 - o')
 
-                  w = msegs .|. last
-              in w
+                    w = msegs .|. lst
+                in w
 
 readWithOffset :: (Bits a, Num a)
          => S -> (a -> Int -> a) -> (a -> Int -> a) -> Int -> a
@@ -328,17 +331,18 @@ readWithOffset (S bs o) shifterL shifterR n
                   segs = byte_offset n'
 
                   bn 0 = 0
-                  bn n = (bn (n-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs n)
+                  bn m = (bn (m-1) `shifterL` 8) .|. fromIntegral (unsafeIndex bs m)
 
                   o' = bit_offset n'
 
                   mseg = bn segs `shifterL` o'
 
-                  last | o' > 0 = (fromIntegral (unsafeIndex bs (segs + 1))) `shifterR` (8 - o')
-                       | otherwise = 0
+                  lst | o' > 0 = (fromIntegral (unsafeIndex bs (segs + 1))) `shifterR` (8 - o')
+                      | otherwise = 0
 
-                  w = top .|. mseg .|. last
+                  w = top .|. mseg .|. lst
               in w
+  | otherwise = error $ "Invalid offset (" ++ show n ++ " > 64)"
 
 ------------------------------------------------------------------------
 -- | 'BitGet' is a monad, applicative and a functor. See 'runBitGet'
@@ -485,8 +489,12 @@ shiftl_w16 :: Word16 -> Int -> Word16
 shiftl_w32 :: Word32 -> Int -> Word32
 shiftl_w64 :: Word64 -> Int -> Word64
 
+shiftr_w8  :: Word8  -> Int -> Word8
+shiftr_w16 :: Word16 -> Int -> Word16
+shiftr_w32 :: Word32 -> Int -> Word32
+shiftr_w64 :: Word64 -> Int -> Word64
+
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
-shiftl_w8  (W8#  w) (I# i) = W8# (w `uncheckedShiftL#`   i)
 shiftl_w16 (W16# w) (I# i) = W16# (w `uncheckedShiftL#`   i)
 shiftl_w32 (W32# w) (I# i) = W32# (w `uncheckedShiftL#`   i)
 
@@ -513,7 +521,6 @@ shiftr_w64 (W64# w) (I# i) = W64# (w `uncheckedShiftRL#` i)
 #endif
 
 #else
-shiftl_w8 = shiftL
 shiftl_w16 = shiftL
 shiftl_w32 = shiftL
 shiftl_w64 = shiftL
