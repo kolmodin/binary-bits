@@ -62,6 +62,9 @@ module Data.Binary.Bits.Get
             -- ** Get bytes
             , getBool
             , getWord8
+            , getWord16
+            , getWord32
+            , getWord64
             , getWord16be
             , getWord32be
             , getWord64be
@@ -79,6 +82,9 @@ module Data.Binary.Bits.Get
             -- ** Read in Blocks
             , bool
             , word8
+            , word16
+            , word32
+            , word64
             , word16be
             , word32be
             , word64be
@@ -395,16 +401,28 @@ getWord8 :: Int -> BitGet Word8
 getWord8 n = block (word8 n)
 
 -- | Get @n@ bits as a 'Word16'. @n@ must be within @[0..16]@.
+getWord16 :: Int -> BitGet Word16
+getWord16 n = block (word16 n)
+
 getWord16be :: Int -> BitGet Word16
-getWord16be n = block (word16be n)
+getWord16be = getWord16
+{-# DEPRECATED getWord16be "Use 'getWord16' instead" #-}
 
 -- | Get @n@ bits as a 'Word32'. @n@ must be within @[0..32]@.
+getWord32 :: Int -> BitGet Word32
+getWord32 n = block (word32 n)
+
 getWord32be :: Int -> BitGet Word32
-getWord32be n = block (word32be n)
+getWord32be = getWord32
+{-# DEPRECATED getWord32be "Use 'getWord32' instead" #-}
 
 -- | Get @n@ bits as a 'Word64'. @n@ must be within @[0..64]@.
+getWord64 :: Int -> BitGet Word64
+getWord64 n = block (word64 n)
+
 getWord64be :: Int -> BitGet Word64
-getWord64be n = block (word64be n)
+getWord64be = getWord64
+{-# DEPRECATED getWord64be "Use 'getWord64' instead" #-}
 
 -- | Get @n@ bytes as a 'ByteString'.
 getByteString :: Int -> BitGet ByteString
@@ -458,16 +476,28 @@ word8 :: Int -> Block Word8
 word8 n = Block n (readWordChecked 8 n)
 
 -- | Read @n@ bits as a 'Word16'. @n@ must be within @[0..16]@.
+word16 :: Int -> Block Word16
+word16 n = Block n (readWordChecked 16 n)
+
 word16be :: Int -> Block Word16
-word16be n = Block n (readWordChecked 16 n)
+word16be = word16
+{-# DEPRECATED word16be "Use 'word16' instead" #-}
 
 -- | Read @n@ bits as a 'Word32'. @n@ must be within @[0..32]@.
+word32 :: Int -> Block Word32
+word32 n = Block n (readWordChecked 32 n)
+
 word32be :: Int -> Block Word32
-word32be n = Block n (readWordChecked 32 n)
+word32be = word32
+{-# DEPRECATED word32be "Use 'word32' instead" #-}
 
 -- | Read @n@ bits as a 'Word64'. @n@ must be within @[0..64]@.
+word64 :: Int -> Block Word64
+word64 n = Block n (readWordChecked 64 n)
+
 word64be :: Int -> Block Word64
-word64be n = Block n (readWordChecked 64 n)
+word64be = word64
+{-# DEPRECATED word64be "Use 'word64' instead" #-}
 
 -- | Read @n@ bytes as a 'ByteString'.
 byteString :: Int -> Block ByteString

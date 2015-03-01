@@ -34,12 +34,12 @@ instance BinaryBit Word8 where
 
 instance BinaryBit Word16 where
   putBits = putWord16be
-  getBits = getWord16be
+  getBits = getWord16
 
 instance BinaryBit Word32 where
   putBits = putWord32be
-  getBits = getWord32be
+  getBits = getWord32
 
 instance BinaryBit Word64 where
   putBits = putWord64be
-  getBits = getWord64be
+  getBits = getWord64
