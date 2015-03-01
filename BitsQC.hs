@@ -271,7 +271,7 @@ prop_composite_case b (W w) = w < 0x8000 ==>
              putWord16be 15 w
       g = do v <- getBool
              case v of
-              True -> getWord16be 15
+              True -> getWord16 15
               False -> do
                 msb <- getWord8 7
                 lsb <- getWord8 8
@@ -395,7 +395,7 @@ type Program = [Primitive]
 instance Arbitrary Primitive where
   arbitrary = do
     let gen c = do
-          let (maxBits, _) = (\w -> (bitSize w, c undefined w)) undefined
+          let (maxBits, _) = (\w -> (finiteBitSize w, c undefined w)) undefined
           bits <- choose (0, maxBits)
           n <- choose (0, fromIntegral (2^bits-1))
           return (c bits n)
@@ -458,9 +458,9 @@ getPrimitive p =
   case p of
     Bool _ -> Bool <$> getBool
     W8 n _ -> W8 n <$> getWord8 n
-    W16 n _ -> W16 n <$> getWord16be n
-    W32 n _ -> W32 n <$> getWord32be n
-    W64 n _ -> W64 n <$> getWord64be n
+    W16 n _ -> W16 n <$> getWord16 n
+    W32 n _ -> W32 n <$> getWord32 n
+    W64 n _ -> W64 n <$> getWord64 n
     BS n _ -> BS n <$> getByteString n
     LBS n _ -> LBS n <$> getLazyByteString n
     IsEmpty -> isEmpty >> return IsEmpty
@@ -474,9 +474,9 @@ verifyProgram totalLength ps0 = go 0 ps0
       case p of
         Bool x -> check x getBool >> go (pos+1) ps
         W8 n x ->  check x (getWord8 n) >> go (pos+n) ps
-        W16 n x -> check x (getWord16be n) >> go (pos+n) ps
-        W32 n x -> check x (getWord32be n) >> go (pos+n) ps
-        W64 n x -> check x (getWord64be n) >> go (pos+n) ps
+        W16 n x -> check x (getWord16 n) >> go (pos+n) ps
+        W32 n x -> check x (getWord32 n) >> go (pos+n) ps
+        W64 n x -> check x (getWord64 n) >> go (pos+n) ps
         BS n x -> check x (getByteString n) >> go (pos+(8*n)) ps
         LBS n x -> check x (getLazyByteString n) >> go (pos+(8*n)) ps
         IsEmpty -> do
