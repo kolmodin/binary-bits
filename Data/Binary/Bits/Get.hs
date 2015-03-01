@@ -276,7 +276,10 @@ readWordChecked m n s
 --    LB: NOPQRxxx FGHIJKLM xxxABCDE -> ABCDEFGH IJKLMNOP QRxxxxxx
 readByteString :: Int -> S -> ByteString
 readByteString n (S bs o bo)
-  | o == 0    = unsafeTake n bs
+  | o == 0    = case bo of
+      BB -> unsafeTake n bs
+      LB -> B.reverse (unsafeTake n bs)
+
   | otherwise = unsafePerformIO $ do
       let len = n+1
       ptr <- mallocBytes len
