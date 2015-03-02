@@ -58,6 +58,7 @@ module Data.Binary.Bits.Get
             , BitOrder(..)
             , runBitGet
             , selectBitOrder
+            , withBitOrder
 
             -- ** Get bytes
             , getBool
@@ -358,6 +359,13 @@ withState f = do
    s <- getState
    putState $! f s
 
+-- | Get the bit ordering
+getBitOrder :: BitGet BitOrder
+getBitOrder = do
+   (S _ _ bo) <- getState
+   return bo
+
+
 -- | Make sure there are at least @n@ bits.
 ensureBits :: Int -> BitGet ()
 ensureBits n = do
@@ -387,6 +395,16 @@ alignByte = do
 -- | Select the bit ordering
 selectBitOrder :: BitOrder -> BitGet ()
 selectBitOrder = withState . selectBitOrderS
+
+withBitOrder :: BitOrder -> BitGet a -> BitGet a
+withBitOrder bo f = do
+   bo' <- getBitOrder
+   selectBitOrder bo
+   r <- f
+   selectBitOrder bo'
+   return r
+
+   
 
 -- | Test whether all input has been consumed, i.e. there are no remaining
 -- undecoded bytes.
