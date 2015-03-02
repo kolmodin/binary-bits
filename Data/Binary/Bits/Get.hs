@@ -213,16 +213,29 @@ mask n v = v .&. make_mask n
 -- E.g. two words of 5 bits: ABCDE, VWXYZ
 --    - BB: ABCDEVWX YZxxxxxx
 --    - LB: XYZABCDE xxxxxxVW
---    - BL: EDCBAZYX WVxxxxxx   -- not implemented
---    - LL: XWVEDCBA xxxxxxZY   -- not implemented
-data BitOrder = BB | LB deriving (Show)
+--    - BL: EDCBAZYX WVxxxxxx
+--    - LL: XWVEDCBA xxxxxxZY
+data BitOrder = BB | LB | BL | LL deriving (Show)
 
+-- | Reverse the @n@ least important bits of the given value
+reverseBits :: (Num a, FastBits a, Bits a) => Int -> a -> a
+reverseBits n value = rec value n 0
+   where
+      -- rec v i r, where
+      --    v is orginal value shifted
+      --    i is the remaining number of bits
+      --    r is current value
+      rec 0 0 r = r
+      rec 0 i r = r `fastShiftL` i
+      rec v i r = rec (v `fastShiftR` 1) (i-1) ((r `fastShiftL` 1) .|. (v .&. 0x1))
 
 -- | Read a single bit
 readBool :: S -> Bool
 readBool (S bs o bo) = case bo of
    BB -> testBit (unsafeHead bs) (7-o)
+   BL -> testBit (unsafeHead bs) (7-o)
    LB -> testBit (unsafeHead bs) o
+   LL -> testBit (unsafeHead bs) o
 
 -- | Extract a range of bits from (ws :: ByteString)
 --
@@ -231,22 +244,31 @@ extract :: (Num a, Bits a, FastBits a) => BitOrder -> ByteString -> Int -> Int -
 extract bo bs o n     
    | n == 0            = 0
    | B.length bs == 0  = error "Empty ByteString"
-   | otherwise         = mask n (foldlWithIndex' f 0 bs)
+   | otherwise         = rev . mask n . foldlWithIndex' f 0 $ bs
    where 
       -- B.foldl' with index
       foldlWithIndex' op b = fst . B.foldl' g (b,0)
          where g (b',i) w = (op b' w i, (i+1))
 
       -- 'or' correctly shifted words
-      f b w i   = b .|. (fromIntegral w `fastShift` off i)
+      f b w i = b .|. (fromIntegral w `fastShift` off i)
 
       -- co-offset
-      r         = B.length bs * 8 - (o + n)
+      r = B.length bs * 8 - (o + n)
 
       -- shift offset depending on the byte position (0..B.length-1)
-      off i     = case bo of
+      off i = case bo of
          LB -> 8*i - o
+         LL -> 8*i - o
          BB -> (B.length bs -1 - i) * 8 - r
+         BL -> (B.length bs -1 - i) * 8 - r
+
+      -- reverse bits if necessary
+      rev = case bo of
+         LL -> reverseBits n
+         BL -> reverseBits n
+         BB  -> id
+         LB  -> id
 
 
 -- | Generic readWord
@@ -275,37 +297,34 @@ readWordChecked m n s
 -- Examples:
 --    BB: xxxABCDE FGHIJKLM NOPQRxxx -> ABCDEFGH IJKLMNOP QRxxxxxx
 --    LB: NOPQRxxx FGHIJKLM xxxABCDE -> ABCDEFGH IJKLMNOP QRxxxxxx
+--    BL: xxxRQPON MLKJIHGF EDCBAxxx -> ABCDEFGH IJKLMNOP QRxxxxxx
+--    LL: EDCBAxxx MLKJIHGF xxxRQPON -> ABCDEFGH IJKLMNOP QRxxxxxx
 readByteString :: Int -> S -> ByteString
-readByteString n (S bs o bo)
-  | o == 0    = case bo of
-      BB -> unsafeTake n bs
-      LB -> B.reverse (unsafeTake n bs)
+readByteString n (S bs o bo) =
+   let 
+      bs' = unsafeTake (n+1) bs
+      rev = B.map (reverseBits 9)
+   in case (o,bo) of
+      (0,BB) -> unsafeTake n bs
+      (0,LB) -> B.reverse (unsafeTake n bs)
+      (0,BL) -> rev (unsafeTake n bs)
+      (0,LL) -> rev (B.reverse (unsafeTake n bs))
+      (_,BL) -> rev (readByteString n (S (B.reverse bs') o LB))
+      (_,LL) -> rev (readByteString n (S (B.reverse bs') o BB))
+      (_,LB) -> readByteString n (S (B.reverse bs') o BB)
+      (_,BB) -> unsafePerformIO $ do
+         let len = n+1
+         ptr <- mallocBytes len
+         let f r i = do
+               let
+                  w  = unsafeIndex bs (len-i)
+                  w' = (w `fastShiftL` o) .|. r
+                  r' = w `fastShiftR` (8-o)
+               poke (ptr `plusPtr` (len-i)) w'
+               return r'
+         foldM_ f 0 [1..len]
+         unsafeInit <$> unsafePackMallocCStringLen (ptr,len)
 
-  | otherwise = unsafePerformIO $ do
-      let len = n+1
-      ptr <- mallocBytes len
-      case bo of
-         BB -> do
-            let f r i = do
-                  let
-                     w  = unsafeIndex bs (len-i)
-                     w' = (w `fastShiftL` o) .|. r
-                     r' = w `fastShiftR` (8-o)
-                  poke (ptr `plusPtr` (len-i)) w'
-                  return r'
-            foldM_ f 0 [1..len]
-            unsafeInit <$> unsafePackMallocCStringLen (ptr,len)
-
-         LB -> do
-            let f r i = do
-                  let
-                     w  = unsafeIndex bs (i-1)
-                     w' = (w `fastShiftL` (8-o)) .|. r
-                     r' = w `fastShiftR` o
-                  poke (ptr `plusPtr` (len-i)) w'
-                  return r'
-            foldM_ f 0 [1..len]
-            unsafeTail <$> unsafePackMallocCStringLen (ptr,len)
 
 ------------------------------------------------------------------------
 -- | 'BitGet' is a monad, applicative and a functor. See 'runBitGet'
