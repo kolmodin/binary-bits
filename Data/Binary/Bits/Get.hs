@@ -57,6 +57,7 @@ module Data.Binary.Bits.Get
               BitGet
             , BitOrder(..)
             , runBitGet
+            , getBitOrder
             , selectBitOrder
             , withBitOrder
 
