@@ -268,8 +268,8 @@ extract bo bs o n
       rev = case bo of
          LL -> reverseBits n
          BL -> reverseBits n
-         BB  -> id
-         LB  -> id
+         BB -> id
+         LB -> id
 
 
 -- | Generic readWord
@@ -296,15 +296,15 @@ readWordChecked m n s
 -- | Read the given number of bytes and return them in Big-Endian order
 --
 -- Examples:
---    BB: xxxABCDE FGHIJKLM NOPQRxxx -> ABCDEFGH IJKLMNOP QRxxxxxx
---    LB: NOPQRxxx FGHIJKLM xxxABCDE -> ABCDEFGH IJKLMNOP QRxxxxxx
---    BL: xxxRQPON MLKJIHGF EDCBAxxx -> ABCDEFGH IJKLMNOP QRxxxxxx
---    LL: EDCBAxxx MLKJIHGF xxxRQPON -> ABCDEFGH IJKLMNOP QRxxxxxx
+--    BB: xxxABCDE FGHIJKLM NOPxxxxx -> ABCDEFGH IJKLMNOP
+--    LB: LMNOPxxx DEFGHIJK xxxxxABC -> ABCDEFGH IJKLMNOP
+--    BL: xxxPONML KJIHGFED CBAxxxxx -> ABCDEFGH IJKLMNOP
+--    LL: EDCBAxxx MLKJIHGF xxxxxPON -> ABCDEFGH IJKLMNOP
 readByteString :: Int -> S -> ByteString
 readByteString n (S bs o bo) =
    let 
       bs' = unsafeTake (n+1) bs
-      rev = B.map (reverseBits 9)
+      rev = B.map (reverseBits 8)
    in case (o,bo) of
       (0,BB) -> unsafeTake n bs
       (0,LB) -> B.reverse (unsafeTake n bs)
