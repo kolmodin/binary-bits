@@ -276,15 +276,8 @@ extract bo bs o n
 readWord :: (Num a, Bits a, FastBits a) => Int -> S -> a
 readWord n (S bs o bo)
    | n == 0    = 0
-   | o+n <= 8  = extract bo (unsafeTake 1 bs) o n
-   | o+n <= 16 = extract bo (unsafeTake 2 bs) o n
-   | o+n <= 24 = extract bo (unsafeTake 3 bs) o n
-   | o+n <= 32 = extract bo (unsafeTake 4 bs) o n
-   | o+n <= 40 = extract bo (unsafeTake 5 bs) o n
-   | o+n <= 48 = extract bo (unsafeTake 6 bs) o n
-   | o+n <= 56 = extract bo (unsafeTake 7 bs) o n
-   | o+n <= 64 = extract bo (unsafeTake 8 bs) o n
-   | otherwise = extract bo (unsafeTake ((o+n+7) `div` 8)  bs) o n
+   | otherwise = extract bo (unsafeTake nbytes bs) o n
+   where nbytes = byte_offset (o+n+7)
 
 -- | Check that the number of bits to read is not greater than the first parameter
 {-# INLINE readWordChecked #-}
