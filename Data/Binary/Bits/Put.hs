@@ -36,6 +36,7 @@ import Data.Binary.Builder ( Builder )
 import qualified Data.Binary.Put as Put
 import Data.Binary.Put ( Put )
 import Data.Binary.Bits.Internal
+import Data.Binary.Bits.BitOrder
 
 import Data.ByteString
 
@@ -48,7 +49,7 @@ data BitPut a = BitPut { run :: (S -> PairS a) }
 
 data PairS a = PairS a {-# UNPACK #-} !S
 
-data S = S !Builder !Word8 !Int
+data S = S !Builder !Word8 !Int !BitOrder
 
 -- | Put a 1 bit 'Bool'.
 putBool :: Bool -> BitPut ()
@@ -60,16 +61,16 @@ putWord8 :: Int -> Word8 -> BitPut ()
 putWord8 n w = BitPut $ \s -> PairS () $
   let w' = make_mask n .&. w in
   case s of
-                -- a whole word8, no offset
-    (S b t o) | n == 8 && o == 0 -> flush $ S b w n
-                -- less than a word8, will fit in the current word8
-              | n <= 8 - o       -> flush $ S b (t .|. (w' `shiftL` (8 - n - o))) (o+n)
-                -- will finish this word8, and spill into the next one
-              | otherwise -> flush $
-                              let o' = o + n - 8
-                                  b' = t .|. (w' `shiftR` o')
-                                  t' = w `shiftL` (8 - o')
-                              in S (b `mappend` B.singleton b') t' o'
+                   -- a whole word8, no offset
+    (S b t o bo) | n == 8 && o == 0 -> flush $ S b w n bo
+                   -- less than a word8, will fit in the current word8
+                 | n <= 8 - o       -> flush $ S b (t .|. (w' `shiftL` (8 - n - o))) (o+n) bo
+                   -- will finish this word8, and spill into the next one
+                 | otherwise -> flush $
+                                 let o' = o + n - 8
+                                     b' = t .|. (w' `shiftR` o')
+                                     t' = w `shiftL` (8 - o')
+                                 in S (b `mappend` B.singleton b') t' o' bo
 
 -- | Put the @n@ lower bits of a 'Word16'.
 putWord16be :: Int -> Word16 -> BitPut ()
@@ -82,18 +83,18 @@ putWord16be n w
           -- as n>=9, it's too big to fit into one single byte
           -- it'll either use 2 or 3 bytes
                                      -- it'll fit in 2 bytes
-          (S b t o) | o + n <= 16 -> flush $
-                        let o' = o + n - 8
-                            b' = t .|. fromIntegral (w' `shiftR` o')
-                            t' = fromIntegral (w `shiftL` (8-o'))
-                        in (S (b `mappend` B.singleton b') t' o')
-                                   -- 3 bytes required
-                    | otherwise -> flush $
-                        let o'  = o + n - 16
-                            b'  = t .|. fromIntegral (w' `shiftR` (o' + 8))
-                            b'' = fromIntegral ((w `shiftR` o') .&. 0xff)
-                            t'  = fromIntegral (w `shiftL` (8-o'))
-                        in (S (b `mappend` B.singleton b' `mappend` B.singleton b'') t' o')
+          (S b t o bo) | o + n <= 16 -> flush $
+                           let o' = o + n - 8
+                               b' = t .|. fromIntegral (w' `shiftR` o')
+                               t' = fromIntegral (w `shiftL` (8-o'))
+                           in (S (b `mappend` B.singleton b') t' o' bo)
+                                      -- 3 bytes required
+                       | otherwise -> flush $
+                           let o'  = o + n - 16
+                               b'  = t .|. fromIntegral (w' `shiftR` (o' + 8))
+                               b'' = fromIntegral ((w `shiftR` o') .&. 0xff)
+                               t'  = fromIntegral (w `shiftL` (8-o'))
+                           in (S (b `mappend` B.singleton b' `mappend` B.singleton b'') t' o' bo)
 
 -- | Put the @n@ lower bits of a 'Word32'.
 putWord32be :: Int -> Word32 -> BitPut ()
@@ -119,33 +120,33 @@ putByteString bs = do
     then mapM_ (putWord8 8) (unpack bs) -- naive
     else joinPut (Put.putByteString bs)
   where
-    hasOffset = BitPut $ \ s@(S _ _ o) -> PairS (o /= 0) s
+    hasOffset = BitPut $ \ s@(S _ _ o _) -> PairS (o /= 0) s
 
 -- | Run a 'Put' inside 'BitPut'. Any partially written bytes will be flushed
 -- before 'Put' executes to ensure byte alignment.
 joinPut :: Put -> BitPut ()
 joinPut m = BitPut $ \s0 -> PairS () $
-  let (S b0 _ _) = flushIncomplete s0
+  let (S b0 _ _ bo) = flushIncomplete s0
       b = Put.execPut m
-  in (S (b0`mappend`b) 0 0)
+  in (S (b0`mappend`b) 0 0 bo)
 
 flush :: S -> S
-flush s@(S b w o)
+flush s@(S b w o bo)
   | o > 8 = error "flush: offset > 8"
-  | o == 8 = S (b `mappend` B.singleton w) 0 0
+  | o == 8 = S (b `mappend` B.singleton w) 0 0 bo
   | otherwise = s
 
 flushIncomplete :: S -> S
-flushIncomplete s@(S b w o)
+flushIncomplete s@(S b w o bo)
   | o == 0 = s
-  | otherwise = (S (b `mappend` B.singleton w) 0 0)
+  | otherwise = (S (b `mappend` B.singleton w) 0 0 bo)
 
 -- | Run the 'BitPut' monad inside 'Put'.
 runBitPut :: BitPut () -> Put.Put
 runBitPut m = Put.putBuilder b
   where
-  PairS _ s = run m (S mempty 0 0)
-  (S b _ _) = flushIncomplete s
+  PairS _ s   = run m (S mempty 0 0 BB)
+  (S b _ _ _) = flushIncomplete s
 
 instance Functor BitPut where
   fmap f (BitPut k) = BitPut $ \s ->
