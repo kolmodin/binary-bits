@@ -35,6 +35,7 @@ import qualified Data.Binary.Builder as B
 import Data.Binary.Builder ( Builder )
 import qualified Data.Binary.Put as Put
 import Data.Binary.Put ( Put )
+import Data.Binary.Bits.Internal
 
 import Data.ByteString
 
@@ -53,15 +54,6 @@ data S = S !Builder !Word8 !Int
 putBool :: Bool -> BitPut ()
 putBool b = putWord8 1 (if b then 0xff else 0x00)
 
--- | make_mask 3 = 00000111
-make_mask :: (Bits a, Num a) => Int -> a
-make_mask n = (1 `shiftL` fromIntegral n) - 1
-{-# SPECIALIZE make_mask :: Int -> Int #-}
-{-# SPECIALIZE make_mask :: Int -> Word #-}
-{-# SPECIALIZE make_mask :: Int -> Word8 #-}
-{-# SPECIALIZE make_mask :: Int -> Word16 #-}
-{-# SPECIALIZE make_mask :: Int -> Word32 #-}
-{-# SPECIALIZE make_mask :: Int -> Word64 #-}
 
 -- | Put the @n@ lower bits of a 'Word8'.
 putWord8 :: Int -> Word8 -> BitPut ()

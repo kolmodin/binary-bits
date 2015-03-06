@@ -24,7 +24,9 @@ library
 
   exposed-modules:     Data.Binary.Bits ,
                        Data.Binary.Bits.Put ,
-                       Data.Binary.Bits.Get
+                       Data.Binary.Bits.Get ,
+                       Data.Binary.Bits.BitOrder
+  other-modules:       Data.Binary.Bits.Internal
 
   default-language:    Haskell98
 
