@@ -179,8 +179,8 @@ readBool :: S -> Bool
 readBool (S bs o bo) = case bo of
    BB -> testBit (unsafeHead bs) (7-o)
    BL -> testBit (unsafeHead bs) (7-o)
-   LB -> testBit (unsafeHead bs) o
    LL -> testBit (unsafeHead bs) o
+   LB -> testBit (unsafeHead bs) o
 
 -- | Extract a range of bits from (ws :: ByteString)
 --
@@ -203,17 +203,17 @@ extract bo bs o n
 
       -- shift offset depending on the byte position (0..B.length-1)
       off i = case bo of
-         LB -> 8*i - o
          LL -> 8*i - o
+         LB -> 8*i - o
          BB -> (B.length bs -1 - i) * 8 - r
          BL -> (B.length bs -1 - i) * 8 - r
 
       -- reverse bits if necessary
       rev = case bo of
-         LL -> reverseBits n
+         LB -> reverseBits n
          BL -> reverseBits n
          BB -> id
-         LB -> id
+         LL -> id
 
 
 -- | Generic readWord
@@ -234,9 +234,9 @@ readWordChecked m n s
 --
 -- Examples:
 --    BB: xxxABCDE FGHIJKLM NOPxxxxx -> ABCDEFGH IJKLMNOP
---    LB: LMNOPxxx DEFGHIJK xxxxxABC -> ABCDEFGH IJKLMNOP
+--    LL: LMNOPxxx DEFGHIJK xxxxxABC -> ABCDEFGH IJKLMNOP
 --    BL: xxxPONML KJIHGFED CBAxxxxx -> ABCDEFGH IJKLMNOP
---    LL: EDCBAxxx MLKJIHGF xxxxxPON -> ABCDEFGH IJKLMNOP
+--    LB: EDCBAxxx MLKJIHGF xxxxxPON -> ABCDEFGH IJKLMNOP
 readByteString :: Int -> S -> ByteString
 readByteString n (S bs o bo) =
    let 
@@ -245,12 +245,12 @@ readByteString n (S bs o bo) =
       rev  = B.map (reverseBits 8)
    in case (o,bo) of
       (0,BB) -> bs''
-      (0,LB) -> B.reverse bs''
-      (0,LL) -> rev bs''
+      (0,LL) -> B.reverse bs''
+      (0,LB) -> rev bs''
       (0,BL) -> rev . B.reverse $ bs''
-      (_,LB) -> readByteString n (S (B.reverse bs') (8-o) BB)
+      (_,LL) -> readByteString n (S (B.reverse bs') (8-o) BB)
       (_,BL) -> rev . B.reverse $ readByteString n (S bs' o BB)
-      (_,LL) -> rev . B.reverse $ readByteString n (S bs' o LB)
+      (_,LB) -> rev . B.reverse $ readByteString n (S bs' o LL)
       (_,BB) -> unsafePerformIO $ do
          let len = n+1
          ptr <- mallocBytes len

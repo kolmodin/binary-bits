@@ -85,8 +85,8 @@ putWordS n w s@(S builder b o bo) = s'
       w' = case bo of
          BB -> w
          BL -> w `fastShiftR` cn
-         LB -> w `fastShiftR` cn
-         LL -> w
+         LL -> w `fastShiftR` cn
+         LB -> w
 
       -- Select bits to store in the current byte.
       -- Put them in the correct order and return them in the least-significant
@@ -94,8 +94,8 @@ putWordS n w s@(S builder b o bo) = s'
       selectBits :: (Num a, FastBits a, Integral a) => a -> Word8
       selectBits x = fromIntegral $ case bo of
          BB ->                  mask cn $ x `fastShiftR` (n-cn)
-         LL -> reverseBits cn $ mask cn $ x `fastShiftR` (n-cn)
-         LB ->                  mask cn x
+         LB -> reverseBits cn $ mask cn $ x `fastShiftR` (n-cn)
+         LL ->                  mask cn x
          BL -> reverseBits cn $ mask cn x
 
       -- shift left at the correct position
@@ -103,8 +103,8 @@ putWordS n w s@(S builder b o bo) = s'
       shl x = case bo of
          BB -> x `fastShiftL` (8-o-cn)
          BL -> x `fastShiftL` (8-o-cn)
-         LB -> x `fastShiftL` o
          LL -> x `fastShiftL` o
+         LB -> x `fastShiftL` o
 
       flush s2@(S b2 w2 o2 bo2)
         | o2 == 8   = S (b2 `mappend` B.singleton w2) 0 0 bo2
@@ -143,9 +143,9 @@ putWord64be = putWord
 --
 -- Examples: 3 bits are already written in the current byte
 --    BB: ABCDEFGH IJKLMNOP -> xxxABCDE FGHIJKLM NOPxxxxx
---    LB: ABCDEFGH IJKLMNOP -> LMNOPxxx DEFGHIJK xxxxxABC
+--    LL: ABCDEFGH IJKLMNOP -> LMNOPxxx DEFGHIJK xxxxxABC
 --    BL: ABCDEFGH IJKLMNOP -> xxxPONML KJIHGFED CBAxxxxx
---    LL: ABCDEFGH IJKLMNOP -> EDCBAxxx MLKJIHGF xxxxxPON
+--    LB: ABCDEFGH IJKLMNOP -> EDCBAxxx MLKJIHGF xxxxxPON
 putByteString :: ByteString -> BitPut ()
 putByteString bs = BitPut $ \s -> PairS () (putByteStringS bs s)
 
@@ -154,13 +154,13 @@ putByteStringS bs s
    | BS.null bs = s
    | otherwise  = case s of
       (S builder b 0 BB) -> S (builder `mappend` B.fromByteString bs) b 0 BB
-      (S builder b 0 LB) -> S (builder `mappend` B.fromByteString (BS.reverse bs)) b 0 LB
-      (S builder b 0 LL) -> S (builder `mappend` B.fromByteString (rev bs)) b 0 LL
+      (S builder b 0 LL) -> S (builder `mappend` B.fromByteString (BS.reverse bs)) b 0 LL
+      (S builder b 0 LB) -> S (builder `mappend` B.fromByteString (rev bs)) b 0 LB
       (S builder b 0 BL) -> S (builder `mappend` B.fromByteString (rev (BS.reverse bs))) b 0 BL
       (S _ _ _ BB)       -> putByteStringS (BS.unsafeTail bs) (putWordS 8 (BS.unsafeHead bs) s)
-      (S _ _ _ LB)       -> putByteStringS (BS.unsafeInit bs) (putWordS 8 (BS.unsafeLast bs) s)
+      (S _ _ _ LL)       -> putByteStringS (BS.unsafeInit bs) (putWordS 8 (BS.unsafeLast bs) s)
       (S _ _ _ BL)       -> putByteStringS (BS.unsafeInit bs) (putWordS 8 (BS.unsafeLast bs) s)
-      (S _ _ _ LL)       -> putByteStringS (BS.unsafeTail bs) (putWordS 8 (BS.unsafeHead bs) s)
+      (S _ _ _ LB)       -> putByteStringS (BS.unsafeTail bs) (putWordS 8 (BS.unsafeHead bs) s)
    where
       rev    = BS.map (reverseBits 8)
 

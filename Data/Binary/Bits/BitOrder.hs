@@ -19,9 +19,9 @@ where
 --
 -- E.g. two words of 5 bits: ABCDE, VWXYZ
 --    - BB: ABCDEVWX YZxxxxxx
---    - LB: XYZABCDE xxxxxxVW
+--    - LL: XYZABCDE xxxxxxVW
 --    - BL: EDCBAZYX WVxxxxxx
---    - LL: XWVEDCBA xxxxxxZY
+--    - LB: XWVEDCBA xxxxxxZY
 data BitOrder
    = BB  -- ^ Big-endian bytes and bits
    | LB  -- ^ Little-endian bytes, big-endian bits
