@@ -189,3 +189,8 @@ instance Monad BitPut where
         PairS b s'' = run (k a) s'
     in PairS b s''
   return x = BitPut $ \s -> PairS x s
+
+instance BitOrderable BitPut where
+   setBitOrder bo = BitPut $ \(S bu b o _) -> PairS () (S bu b o bo)
+
+   getBitOrder = BitPut $ \s@(S _ _ _ bo) -> PairS bo s

@@ -57,9 +57,6 @@ module Data.Binary.Bits.Get
 
               BitGet
             , runBitGet
-            , getBitOrder
-            , selectBitOrder
-            , withBitOrder
 
             -- ** Get bytes
             , getBool
@@ -176,10 +173,6 @@ incS o (S bs n bo) = S (unsafeDrop d bs) n' bo
       !d  = byte_offset o'
       !n' = bit_offset o'
 
--- | Select the bit ordering
-selectBitOrderS :: BitOrder -> S -> S
-selectBitOrderS bo (S bs o _) = S bs o bo
-
 -- | Read a single bit
 readBool :: S -> Bool
 readBool (S bs o bo) = case bo of
@@ -288,6 +281,15 @@ instance Applicative BitGet where
   pure x = return x
   fm <*> m = fm >>= \f -> m >>= \v -> return (f v)
 
+instance BitOrderable BitGet where
+   setBitOrder bo = do
+      (S bs o _) <- getState
+      putState (S bs o bo)
+
+   getBitOrder = do
+      (S _ _ bo) <- getState
+      return bo
+
 -- | Run a 'BitGet' within the Binary packages 'Get' monad. If a byte has
 -- been partially consumed it will be discarded once 'runBitGet' is finished.
 runBitGet :: BitGet a -> Get a
@@ -322,13 +324,6 @@ withState f = do
    s <- getState
    putState $! f s
 
--- | Get the bit ordering
-getBitOrder :: BitGet BitOrder
-getBitOrder = do
-   (S _ _ bo) <- getState
-   return bo
-
-
 -- | Make sure there are at least @n@ bits.
 ensureBits :: Int -> BitGet ()
 ensureBits n = do
@@ -355,19 +350,6 @@ alignByte = do
    when (o /= 0) $
       skipBits (8-o)
 
--- | Select the bit ordering
-selectBitOrder :: BitOrder -> BitGet ()
-selectBitOrder = withState . selectBitOrderS
-
-withBitOrder :: BitOrder -> BitGet a -> BitGet a
-withBitOrder bo f = do
-   bo' <- getBitOrder
-   selectBitOrder bo
-   r <- f
-   selectBitOrder bo'
-   return r
-
-   
 
 -- | Test whether all input has been consumed, i.e. there are no remaining
 -- undecoded bytes.

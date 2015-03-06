@@ -11,6 +11,7 @@
 
 module Data.Binary.Bits.BitOrder
    ( BitOrder(..)
+   , BitOrderable(..)
    )
 where
 
@@ -27,3 +28,20 @@ data BitOrder
    | BL  -- ^ Big-endian bytes, little-endian bits
    | LL  -- ^ Little-endian bytes and bits
    deriving (Show)
+
+
+class Monad m => BitOrderable m where
+   -- | Set the current bit-order
+   setBitOrder :: BitOrder -> m ()
+
+   -- | Retrieve the current bit-order
+   getBitOrder    :: m BitOrder
+
+   -- | Perform the given action with the given bit-order
+   withBitOrder   :: BitOrder -> m a -> m a
+   withBitOrder bo act = do
+      bo' <- getBitOrder
+      setBitOrder bo
+      r <- act
+      setBitOrder bo'
+      return r
