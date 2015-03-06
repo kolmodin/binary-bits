@@ -268,7 +268,7 @@ prop_bitreq (W w) = property $
 prop_composite_case :: Bool -> W Word16 -> Property
 prop_composite_case b (W w) = w < 0x8000 ==>
   let p = do putBool b
-             putWord16be 15 w
+             putWord16 15 w
       g = do v <- getBool
              case v of
               True -> getWord16 15
@@ -446,9 +446,9 @@ putPrimitive p =
   case p of
     Bool b -> putBool b
     W8 n x -> putWord8 n x
-    W16 n x -> putWord16be n x
-    W32 n x -> putWord32be n x
-    W64 n x -> putWord64be n x
+    W16 n x -> putWord16 n x
+    W32 n x -> putWord32 n x
+    W64 n x -> putWord64 n x
     BS _ bs -> putByteString bs
     LBS _ lbs -> mapM_ putByteString (L.toChunks lbs)
     IsEmpty -> return ()

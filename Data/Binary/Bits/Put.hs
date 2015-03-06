@@ -23,6 +23,9 @@ module Data.Binary.Bits.Put
 
           -- ** Words
           , putWord8
+          , putWord16
+          , putWord32
+          , putWord64
           , putWord16be
           , putWord32be
           , putWord64be
@@ -111,16 +114,28 @@ putWord8 :: Int -> Word8 -> BitPut ()
 putWord8 = putWord
 
 -- | Put the @n@ lower bits of a 'Word16'.
+putWord16 :: Int -> Word16 -> BitPut ()
+putWord16 = putWord
+
 putWord16be :: Int -> Word16 -> BitPut ()
 putWord16be = putWord
+{-# DEPRECATED putWord16be "Use 'putWord16' instead" #-}
 
 -- | Put the @n@ lower bits of a 'Word32'.
+putWord32 :: Int -> Word32 -> BitPut ()
+putWord32 = putWord
+
 putWord32be :: Int -> Word32 -> BitPut ()
 putWord32be = putWord
+{-# DEPRECATED putWord32be "Use 'putWord32' instead" #-}
 
 -- | Put the @n@ lower bits of a 'Word64'.
+putWord64 :: Int -> Word64 -> BitPut ()
+putWord64 = putWord
+
 putWord64be :: Int -> Word64 -> BitPut ()
 putWord64be = putWord
+{-# DEPRECATED putWord64be "Use 'putWord64' instead" #-}
 
 -- | Put a 'ByteString'.
 --
