@@ -39,7 +39,8 @@ import Data.Binary.Put ( Put )
 import Data.Binary.Bits.Internal
 import Data.Binary.Bits.BitOrder
 
-import Data.ByteString
+import Data.ByteString as BS
+import Data.ByteString.Unsafe as BS
 
 import Control.Applicative
 import Data.Bits
@@ -100,6 +101,11 @@ putWordS n w s@(S builder b o bo) = s'
          LB -> x `fastShiftL` o
          LL -> x `fastShiftL` o
 
+      flush s2@(S b2 w2 o2 bo2)
+        | o2 == 8   = S (b2 `mappend` B.singleton w2) 0 0 bo2
+        | otherwise = s2
+
+
 -- | Put the @n@ lower bits of a 'Word8'.
 putWord8 :: Int -> Word8 -> BitPut ()
 putWord8 = putWord
@@ -117,28 +123,41 @@ putWord64be :: Int -> Word64 -> BitPut ()
 putWord64be = putWord
 
 -- | Put a 'ByteString'.
+--
+-- Examples: 3 bits are already written in the current byte
+--    BB: ABCDEFGH IJKLMNOP -> xxxABCDE FGHIJKLM NOPxxxxx
+--    LB: ABCDEFGH IJKLMNOP -> LMNOPxxx DEFGHIJK xxxxxABC
+--    BL: ABCDEFGH IJKLMNOP -> xxxPONML KJIHGFED CBAxxxxx
+--    LL: ABCDEFGH IJKLMNOP -> EDCBAxxx MLKJIHGF xxxxxPON
 putByteString :: ByteString -> BitPut ()
-putByteString bs = do
-  offset <- hasOffset
-  if offset
-    then mapM_ (putWord8 8) (unpack bs) -- naive
-    else joinPut (Put.putByteString bs)
-  where
-    hasOffset = BitPut $ \ s@(S _ _ o _) -> PairS (o /= 0) s
+putByteString bs = BitPut $ \s -> PairS () (putByteStringS bs s)
+
+putByteStringS :: ByteString -> S -> S
+putByteStringS bs (S builder b 0 BB) = S (builder `mappend` B.fromByteString bs) b 0 BB
+putByteStringS bs s@(S _ _ _ BB)
+   | BS.null bs = s
+   | otherwise  = putByteStringS (BS.unsafeTail bs) (putWordS 8 (BS.unsafeHead bs) s)
+putByteStringS bs (S builder b o bo) = putByteStringS bs' (S builder b o BB)
+   where
+      rev = BS.map (reverseBits 8)
+
+      bs' = case bo of
+         BL -> BS.reverse (rev bs)
+         LB -> BS.reverse bs
+         LL -> rev bs
+         BB -> bs -- should not occur, already matched but the compiler doesn't detect it
+
+
 
 -- | Run a 'Put' inside 'BitPut'. Any partially written bytes will be flushed
 -- before 'Put' executes to ensure byte alignment.
+--
+-- Warning: this method does not take bit order into account (i.e. BB assumed)
 joinPut :: Put -> BitPut ()
 joinPut m = BitPut $ \s0 -> PairS () $
   let (S b0 _ _ bo) = flushIncomplete s0
       b = Put.execPut m
   in (S (b0`mappend`b) 0 0 bo)
-
-flush :: S -> S
-flush s@(S b w o bo)
-  | o > 8 = error "flush: offset > 8"
-  | o == 8 = S (b `mappend` B.singleton w) 0 0 bo
-  | otherwise = s
 
 flushIncomplete :: S -> S
 flushIncomplete s@(S b w o bo)
