@@ -2,6 +2,7 @@
 -- |
 -- Module      :  Data.Binary.Bits.Put
 -- Copyright   :  (c) Lennart Kolmodin 2010-2011
+--                (c) Sylvain Henry 2015
 -- License     :  BSD3-style (see LICENSE)
 --
 -- Maintainer  :  kolmodin@gmail.com
@@ -56,61 +57,64 @@ putBool :: Bool -> BitPut ()
 putBool b = putWord8 1 (if b then 0xff else 0x00)
 
 
+-- | Generic putWord
+putWord :: (Num a, FastBits a, Integral a) => Int -> a -> BitPut ()
+putWord n w = BitPut $ \s -> PairS () (putWordS n w s)
+
+putWordS :: (Num a, FastBits a, Integral a) => Int -> a -> S -> S
+putWordS n w s@(S builder b o bo) = s'
+   where
+      -- number of bits that will be stored in the current byte
+      cn = min (8-o) n
+
+      -- new state
+      s' = case n of
+            0 -> s
+            _ -> putWordS (n-cn) w' (flush (S builder b' (o+cn) bo))
+      
+      -- new current byte
+      b' = shl (selectBits w) .|. b
+
+      -- Word containing the remaining (n-cn) bits to store in its LSB
+      w' = case bo of
+         BB -> w
+         BL -> w
+         LB -> w `fastShiftR` cn
+         LL -> w `fastShiftR` cn
+
+      -- Select bits to store in the current byte.
+      -- Put them in the correct order and return them in the least-significant
+      -- bits of the returned value
+      selectBits :: (Num a, FastBits a, Integral a) => a -> Word8
+      selectBits x = fromIntegral $ case bo of
+         BB ->                  mask cn $ x `fastShiftR` (n-cn)
+         BL -> reverseBits cn $ mask cn $ x `fastShiftR` (n-cn)
+         LB ->                  mask cn x
+         LL -> reverseBits cn $ mask cn x
+
+      -- shift left at the correct position
+      shl :: Word8 -> Word8
+      shl x = case bo of
+         BB -> x `fastShiftL` (8-o-cn)
+         BL -> x `fastShiftL` (8-o-cn)
+         LB -> x `fastShiftL` o
+         LL -> x `fastShiftL` o
+
 -- | Put the @n@ lower bits of a 'Word8'.
 putWord8 :: Int -> Word8 -> BitPut ()
-putWord8 n w = BitPut $ \s -> PairS () $
-  let w' = make_mask n .&. w in
-  case s of
-                   -- a whole word8, no offset
-    (S b t o bo) | n == 8 && o == 0 -> flush $ S b w n bo
-                   -- less than a word8, will fit in the current word8
-                 | n <= 8 - o       -> flush $ S b (t .|. (w' `shiftL` (8 - n - o))) (o+n) bo
-                   -- will finish this word8, and spill into the next one
-                 | otherwise -> flush $
-                                 let o' = o + n - 8
-                                     b' = t .|. (w' `shiftR` o')
-                                     t' = w `shiftL` (8 - o')
-                                 in S (b `mappend` B.singleton b') t' o' bo
+putWord8 = putWord
 
 -- | Put the @n@ lower bits of a 'Word16'.
 putWord16be :: Int -> Word16 -> BitPut ()
-putWord16be n w
-  | n <= 8 = putWord8 n (fromIntegral w)
-  | otherwise =
-      BitPut $ \s -> PairS () $
-        let w' = make_mask n .&. w in
-        case s of
-          -- as n>=9, it's too big to fit into one single byte
-          -- it'll either use 2 or 3 bytes
-                                     -- it'll fit in 2 bytes
-          (S b t o bo) | o + n <= 16 -> flush $
-                           let o' = o + n - 8
-                               b' = t .|. fromIntegral (w' `shiftR` o')
-                               t' = fromIntegral (w `shiftL` (8-o'))
-                           in (S (b `mappend` B.singleton b') t' o' bo)
-                                      -- 3 bytes required
-                       | otherwise -> flush $
-                           let o'  = o + n - 16
-                               b'  = t .|. fromIntegral (w' `shiftR` (o' + 8))
-                               b'' = fromIntegral ((w `shiftR` o') .&. 0xff)
-                               t'  = fromIntegral (w `shiftL` (8-o'))
-                           in (S (b `mappend` B.singleton b' `mappend` B.singleton b'') t' o' bo)
+putWord16be = putWord
 
 -- | Put the @n@ lower bits of a 'Word32'.
 putWord32be :: Int -> Word32 -> BitPut ()
-putWord32be n w
-  | n <= 16 = putWord16be n (fromIntegral w)
-  | otherwise = do
-      putWord32be (n-16) (w`shiftR`16)
-      putWord32be    16  (w .&. 0x0000ffff)
+putWord32be = putWord
 
 -- | Put the @n@ lower bits of a 'Word64'.
 putWord64be :: Int -> Word64 -> BitPut ()
-putWord64be n w
-  | n <= 32 = putWord32be n (fromIntegral w)
-  | otherwise = do
-      putWord64be (n-32) (w`shiftR`32)
-      putWord64be    32  (w .&. 0xffffffff)
+putWord64be = putWord
 
 -- | Put a 'ByteString'.
 putByteString :: ByteString -> BitPut ()

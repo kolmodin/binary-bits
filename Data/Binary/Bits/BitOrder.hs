@@ -2,6 +2,7 @@
 -- |
 -- Module      :  Data.Binary.Bits.Get
 -- Copyright   :  (c) Lennart Kolmodin 2010-2011
+--                (c) Sylvain Henry 2015
 -- License     :  BSD3-style (see LICENSE)
 --
 -- Maintainer  :  kolmodin@gmail.com
