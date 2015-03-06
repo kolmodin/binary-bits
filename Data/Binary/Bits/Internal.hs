@@ -29,8 +29,8 @@ import GHC.Word
 #endif
 
 -- | make_mask 3 = 00000111
-make_mask :: (FastBits a, Num a) => Int -> a
-make_mask n = (1 `fastShiftL` fromIntegral n) - 1
+make_mask :: (Bits a, Num a) => Int -> a
+make_mask n = (1 `shiftL` fromIntegral n) - 1
 {-# SPECIALIZE make_mask :: Int -> Int #-}
 {-# SPECIALIZE make_mask :: Int -> Word #-}
 {-# SPECIALIZE make_mask :: Int -> Word8 #-}
@@ -39,7 +39,7 @@ make_mask n = (1 `fastShiftL` fromIntegral n) - 1
 {-# SPECIALIZE make_mask :: Int -> Word64 #-}
 
 -- | Keep only the n least-significant bits of the given value
-mask :: (FastBits a, Num a) => Int -> a -> a
+mask :: (Bits a, Num a) => Int -> a -> a
 mask n v = v .&. make_mask n
 {-# INLINE mask #-}
 
