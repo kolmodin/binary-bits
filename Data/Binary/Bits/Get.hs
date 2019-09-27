@@ -340,9 +340,11 @@ readWithOffset (S bs o) shifterL shifterR n
 -- for how to run it.
 newtype BitGet a = B { runState :: S -> Get (S,a) }
 
+instance MonadFail BitGet where
+  fail str = B $ \(S inp n) -> putBackState inp n >> fail str
+
 instance Monad BitGet where
   return x = B $ \s -> return (s,x)
-  fail str = B $ \(S inp n) -> putBackState inp n >> fail str
   (B f) >>= g = B $ \s -> do (s',a) <- f s
                              runState (g a) s'
 
