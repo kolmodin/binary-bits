@@ -96,6 +96,8 @@ import Control.Applicative
 
 import Prelude as P
 
+import qualified Control.Monad.Fail as Fail
+
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
 import GHC.Base
 import GHC.Word
@@ -340,8 +342,8 @@ readWithOffset (S bs o) shifterL shifterR n
 -- for how to run it.
 newtype BitGet a = B { runState :: S -> Get (S,a) }
 
-instance MonadFail BitGet where
-  fail str = B $ \(S inp n) -> putBackState inp n >> fail str
+instance Fail.MonadFail BitGet where
+  fail str = B $ \(S inp n) -> putBackState inp n >> Fail.fail str
 
 instance Monad BitGet where
   return x = B $ \s -> return (s,x)
