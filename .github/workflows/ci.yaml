@@ -1,0 +1,28 @@
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ ubuntu-18.04 ]
+        ghc: [ '8.10' ]
+        cabal: [ '3.2' ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - id: setup-haskell
+        uses: actions/setup-haskell@v1
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+      - uses: actions/cache@v2
+        with:
+          path: ${{ steps.setup-haskell.outputs.cabal-store }}
+          keys: ${{ matrix.os }}-${{ matrix.ghc }}-${{ matrix.cabal }}-${{ hashFiles('binary-bits.cabal') }}
+          restore-keys: ${{ matrix.os }}-${{ matrix.ghc }}-${{ matrix.cabal }}-
+      - run: cabal test --test-show-details direct
